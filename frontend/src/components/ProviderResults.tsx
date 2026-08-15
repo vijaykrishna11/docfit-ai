@@ -1,7 +1,7 @@
 import type { ProviderSearchResultDto, SortOption } from '../api/types'
 import ProviderCard from './ProviderCard'
 import ProviderCardSkeleton from './ProviderCardSkeleton'
-import { AlertIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons'
+import { AlertIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, LocationIcon } from './icons'
 
 export type SearchStatus = 'idle' | 'loading' | 'error' | 'success'
 
@@ -110,8 +110,20 @@ function ProviderResults({
             </label>
 
             {onShare && (
-              <button type="button" className="secondary-button" onClick={onShare}>
-                Share search
+              <button
+                type="button"
+                className={`secondary-button share-button${shareCopied ? ' is-success' : ''}`}
+                onClick={onShare}
+                aria-live="polite"
+              >
+                {shareCopied ? (
+                  <>
+                    <CheckIcon width={14} height={14} />
+                    Link copied
+                  </>
+                ) : (
+                  'Share search'
+                )}
               </button>
             )}
           </div>
@@ -130,26 +142,26 @@ function ProviderResults({
         )}
       </div>
 
-      <div aria-live="polite" className="share-confirmation-region">
-        {shareCopied && <span className="share-confirmation">Search link copied</span>}
-      </div>
-
       {results.length === 0 ? (
         <div className="state-panel empty-panel">
+          <div className="empty-panel-icon" aria-hidden="true">
+            <LocationIcon width={22} height={22} />
+          </div>
           <h3>No providers found nearby</h3>
           <p>
             We couldn&rsquo;t find any matching providers within {radiusMiles} miles of {headingLabel}.
           </p>
           <p className="state-hint">
-            This demo dataset currently covers a limited Long Beach / Los Angeles area. Try a
-            nearby ZIP such as 90802, 90803, 90806, 90815, 90712, or 90755.
+            Try increasing your search radius or choosing a nearby location. This demo dataset
+            currently covers a limited Long Beach / Los Angeles area -- try a nearby ZIP such as
+            90802, 90803, 90806, 90815, 90712, or 90755.
           </p>
         </div>
       ) : (
         <>
           <ul className="provider-list">
-            {results.map((provider) => (
-              <ProviderCard key={provider.id} provider={provider} />
+            {results.map((provider, index) => (
+              <ProviderCard key={provider.id} provider={provider} entranceIndex={index} />
             ))}
           </ul>
 

@@ -4,7 +4,7 @@ import { ApiError, fetchProviderDetail } from '../api/client'
 import type { ProviderDetailDto } from '../api/types'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
-import { AlertIcon, DirectionsIcon, InfoIcon, LocationIcon, PhoneIcon } from '../components/icons'
+import { AlertIcon, BadgeIcon, ChevronLeftIcon, DirectionsIcon, InfoIcon, LocationIcon, PhoneIcon } from '../components/icons'
 import {
   directionsUrl,
   formatDistance,
@@ -67,7 +67,8 @@ function ProviderDetailPage() {
       <Header />
       <main className="container detail-content">
         <button type="button" className="back-link" onClick={() => navigate(-1)}>
-          ← Back to results
+          <ChevronLeftIcon width={16} height={16} />
+          Back to results
         </button>
 
         {status === 'loading' && <p className="results-heading-loading">Loading provider details…</p>}
@@ -136,7 +137,10 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
 
       <dl className="provider-detail-grid">
         <div>
-          <dt>Practice address</dt>
+          <dt>
+            <LocationIcon width={13} height={13} />
+            Practice address
+          </dt>
           <dd>
             {line1}
             <br />
@@ -144,12 +148,18 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
           </dd>
         </div>
         <div>
-          <dt>NPI</dt>
+          <dt>
+            <BadgeIcon width={13} height={13} />
+            NPI
+          </dt>
           <dd>{detail.npiNumber}</dd>
         </div>
         {detail.phone && (
           <div>
-            <dt>Phone</dt>
+            <dt>
+              <PhoneIcon width={13} height={13} />
+              Phone
+            </dt>
             <dd>{detail.phone}</dd>
           </div>
         )}

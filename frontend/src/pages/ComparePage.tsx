@@ -4,7 +4,7 @@ import { ApiError, fetchProviderDetail } from '../api/client'
 import type { ProviderDetailDto } from '../api/types'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
-import { AlertIcon, DirectionsIcon, InfoIcon, PhoneIcon } from '../components/icons'
+import { AlertIcon, ChevronLeftIcon, DirectionsIcon, InfoIcon, PhoneIcon } from '../components/icons'
 import { directionsUrl, formatDistance, formattedAddress, providerDisplayName, telHref } from '../utils/providerDisplay'
 
 const UNREACHABLE_MESSAGE = 'Unable to reach the search service. Please try again.'
@@ -56,7 +56,8 @@ function ComparePage() {
       <Header />
       <main className="container compare-content">
         <Link to="/" className="back-link">
-          ← Back to search
+          <ChevronLeftIcon width={16} height={16} />
+          Back to search
         </Link>
 
         <h1>Compare providers</h1>

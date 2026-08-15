@@ -1,6 +1,6 @@
 function About() {
   return (
-    <section className="page-section" id="about">
+    <section className="page-section page-section-navy" id="about">
       <div className="container about-content">
         <h2>About DocFit AI</h2>
         <p>

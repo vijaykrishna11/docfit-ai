@@ -1,10 +1,10 @@
-import { InsuranceIcon, LocationIcon, SpecialtyIcon } from './icons'
+import { CompareIcon, LocationIcon, SpecialtyIcon } from './icons'
 
 const STEPS = [
   {
     icon: SpecialtyIcon,
-    title: 'Choose the care you need',
-    copy: 'Pick a specialty, from primary care to psychiatry, based on the type of provider you’re looking for.',
+    title: 'Choose your specialty',
+    copy: 'Pick the type of care you need, from primary care to psychiatry.',
   },
   {
     icon: LocationIcon,
@@ -12,7 +12,7 @@ const STEPS = [
     copy: 'Enter a ZIP code or city, or share your location, then pick a search radius.',
   },
   {
-    icon: InsuranceIcon,
+    icon: CompareIcon,
     title: 'Compare nearby providers',
     copy: 'Review real provider details side by side and reach out directly.',
   },
@@ -27,9 +27,11 @@ function HowItWorks() {
           {STEPS.map((step, index) => (
             <li className="step-card" key={step.title}>
               <span className="step-number" aria-hidden="true">
-                {index + 1}
+                {String(index + 1).padStart(2, '0')}
               </span>
-              <step.icon width={22} height={22} />
+              <div className="step-icon">
+                <step.icon width={22} height={22} />
+              </div>
               <h3>{step.title}</h3>
               <p>{step.copy}</p>
             </li>

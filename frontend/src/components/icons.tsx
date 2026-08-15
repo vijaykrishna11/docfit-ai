@@ -136,6 +136,16 @@ export function ChevronRightIcon(props: IconProps) {
   )
 }
 
+export function CompareIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3.5" y="4" width="7.5" height="16" rx="2" />
+      <rect x="13" y="4" width="7.5" height="16" rx="2" />
+      <path d="M7.25 9v2M16.75 13v2" />
+    </svg>
+  )
+}
+
 export function ExternalLinkIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

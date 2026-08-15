@@ -39,6 +39,17 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
   const geolocation = useGeolocation()
 
   const usingCurrentLocation = geolocation.status === 'granted' && geolocation.coords != null
+  const [justFoundLocation, setJustFoundLocation] = useState(false)
+
+  useEffect(() => {
+    if (geolocation.status !== 'granted') {
+      return
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- brief confirmation flash on success
+    setJustFoundLocation(true)
+    const timeoutId = window.setTimeout(() => setJustFoundLocation(false), 1600)
+    return () => window.clearTimeout(timeoutId)
+  }, [geolocation.status])
 
   useEffect(() => {
     if (usingCurrentLocation || locationText.trim().length === 0) {
@@ -160,20 +171,24 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
           type="button"
           className={`use-location-button${geolocation.status === 'requesting' ? ' is-loading' : ''}${
             usingCurrentLocation ? ' is-granted' : ''
-          }`}
+          }${justFoundLocation ? ' is-found' : ''}`}
           onClick={geolocation.request}
           disabled={geolocation.status === 'requesting'}
         >
-          {usingCurrentLocation ? (
+          {geolocation.status === 'requesting' ? (
+            <span className="spinner spinner-sm" aria-hidden="true" />
+          ) : usingCurrentLocation ? (
             <CheckIcon width={15} height={15} />
           ) : (
             <CrosshairIcon width={15} height={15} />
           )}
           {geolocation.status === 'requesting'
-            ? 'Getting location…'
-            : usingCurrentLocation
-              ? 'Using your location'
-              : 'Use my location'}
+            ? 'Finding your location…'
+            : justFoundLocation
+              ? 'Location found'
+              : usingCurrentLocation
+                ? 'Using your location'
+                : 'Use my location'}
         </button>
         {geolocation.errorMessage && (
           <p className="field-hint field-hint-error" role="alert">
@@ -198,8 +213,8 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
         </select>
       </div>
 
-      <button type="submit" className="primary-button search-cta" disabled={disabled}>
-        <SearchIcon width={18} height={18} />
+      <button type="submit" className="primary-button search-cta" disabled={disabled} aria-busy={disabled}>
+        {disabled ? <span className="spinner" aria-hidden="true" /> : <SearchIcon width={18} height={18} />}
         {disabled ? 'Searching…' : 'Find providers'}
       </button>
     </form>

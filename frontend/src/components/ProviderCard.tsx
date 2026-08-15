@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { ProviderSearchResultDto } from '../api/types'
 import { useCompare } from '../context/CompareContext'
@@ -9,17 +10,28 @@ import {
   providerDisplayName,
   telHref,
 } from '../utils/providerDisplay'
-import { BadgeIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
+import { BadgeIcon, CheckIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
 
-function ProviderCard({ provider }: { provider: ProviderSearchResultDto }) {
+const MAX_STAGGER_INDEX = 8
+const STAGGER_STEP_MS = 35
+
+interface ProviderCardProps {
+  provider: ProviderSearchResultDto
+  entranceIndex?: number
+}
+
+function ProviderCard({ provider, entranceIndex = 0 }: ProviderCardProps) {
   const { isSelected, toggle, isFull } = useCompare()
   const name = providerDisplayName(provider)
   const { line1, line2 } = formattedAddress(provider)
   const selected = isSelected(provider.id)
   const disableCompareToggle = !selected && isFull
+  const style = {
+    '--entrance-delay': `${Math.min(entranceIndex, MAX_STAGGER_INDEX) * STAGGER_STEP_MS}ms`,
+  } as CSSProperties
 
   return (
-    <li className="provider-card">
+    <li className={`provider-card${selected ? ' is-selected' : ''}`} style={style}>
       <div className="provider-card-top">
         <div className="avatar" aria-hidden="true">
           {initialsFor(name)}
@@ -56,8 +68,16 @@ function ProviderCard({ provider }: { provider: ProviderSearchResultDto }) {
       </div>
 
       <div className="provider-card-actions">
-        <label className="compare-checkbox">
-          <input type="checkbox" checked={selected} disabled={disableCompareToggle} onChange={() => toggle(provider.id)} />
+        <label className={`compare-checkbox${selected ? ' is-checked' : ''}`}>
+          <input
+            type="checkbox"
+            checked={selected}
+            disabled={disableCompareToggle}
+            onChange={() => toggle(provider.id)}
+          />
+          <span className="compare-checkbox-box" aria-hidden="true">
+            {selected && <CheckIcon width={11} height={11} />}
+          </span>
           Compare
         </label>
 
