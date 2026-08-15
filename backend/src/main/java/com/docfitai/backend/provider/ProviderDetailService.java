@@ -63,7 +63,8 @@ public class ProviderDetailService {
                 provider.getStateCode(),
                 provider.getPostalCode(),
                 distanceMiles,
-                taxonomies);
+                taxonomies,
+                provider.getImportedAt());
     }
 
     private Double resolveDistance(Provider provider, String zip, String location, Double lat, Double lng) {

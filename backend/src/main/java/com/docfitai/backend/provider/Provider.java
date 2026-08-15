@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 @Table(name = "provider")
@@ -50,6 +51,11 @@ public class Provider {
 
     @Column(precision = 9, scale = 6)
     private BigDecimal longitude;
+
+    // Populated by the database's DEFAULT now() -- never set from Java -- so it always reflects
+    // the true moment the row was written, for both the historical backfill and future imports.
+    @Column(name = "imported_at", insertable = false, updatable = false)
+    private Instant importedAt;
 
     protected Provider() {
     }
@@ -131,5 +137,9 @@ public class Provider {
 
     public BigDecimal getLongitude() {
         return longitude;
+    }
+
+    public Instant getImportedAt() {
+        return importedAt;
     }
 }

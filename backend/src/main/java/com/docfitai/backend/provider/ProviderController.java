@@ -1,7 +1,9 @@
 package com.docfitai.backend.provider;
 
 import com.docfitai.backend.provider.dto.ProviderDetailDto;
+import com.docfitai.backend.provider.dto.ProviderNameSearchResultDto;
 import com.docfitai.backend.provider.dto.ProviderSearchResponseDto;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,10 +16,20 @@ public class ProviderController {
 
     private final ProviderSearchService providerSearchService;
     private final ProviderDetailService providerDetailService;
+    private final ProviderNameSearchService providerNameSearchService;
 
-    public ProviderController(ProviderSearchService providerSearchService, ProviderDetailService providerDetailService) {
+    public ProviderController(
+            ProviderSearchService providerSearchService,
+            ProviderDetailService providerDetailService,
+            ProviderNameSearchService providerNameSearchService) {
         this.providerSearchService = providerSearchService;
         this.providerDetailService = providerDetailService;
+        this.providerNameSearchService = providerNameSearchService;
+    }
+
+    @GetMapping("/by-name")
+    public List<ProviderNameSearchResultDto> searchByName(@RequestParam(defaultValue = "") String q) {
+        return providerNameSearchService.search(q);
     }
 
     @GetMapping("/search")

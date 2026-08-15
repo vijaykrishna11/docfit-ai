@@ -1,10 +1,11 @@
-package com.docfitai.backend.provider.dto;
+package com.docfitai.backend.account.dto;
 
 import java.time.Instant;
-import java.util.List;
 
-public record ProviderDetailDto(
+public record SavedProviderDto(
         Long id,
+        Instant savedAt,
+        Long providerId,
         String npiNumber,
         String firstName,
         String lastName,
@@ -14,8 +15,5 @@ public record ProviderDetailDto(
         String addressLine2,
         String city,
         String stateCode,
-        String postalCode,
-        Double distanceMiles,
-        List<ProviderTaxonomyDto> taxonomies,
-        Instant importedAt) {
+        String postalCode) {
 }
