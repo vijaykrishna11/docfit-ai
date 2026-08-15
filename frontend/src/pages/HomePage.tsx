@@ -10,10 +10,14 @@ import Header from '../components/Header'
 import Hero from '../components/Hero'
 import HowItWorks from '../components/HowItWorks'
 import { InfoIcon } from '../components/icons'
+import PopularSpecialties from '../components/PopularSpecialties'
+import PrivacyAccountMessage from '../components/PrivacyAccountMessage'
 import ProviderNameSearch from '../components/ProviderNameSearch'
 import ProviderResults, { type SearchStatus } from '../components/ProviderResults'
 import RecentlyViewed from '../components/RecentlyViewed'
 import SearchForm, { type SearchFormValues } from '../components/SearchForm'
+import SupportedAreas from '../components/SupportedAreas'
+import WhyDocFit from '../components/WhyDocFit'
 import { useAuth } from '../context/AuthContext'
 
 const UNREACHABLE_MESSAGE = 'Unable to reach the search service. Please try again.'
@@ -148,6 +152,29 @@ function HomePage() {
     } finally {
       setIsSavingSearch(false)
     }
+  }
+
+  function scrollToSearchPanel() {
+    window.setTimeout(() => {
+      document.getElementById('search-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
+  function handleSpecialtyShortcut(code: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('specialty', code)
+    setSearchParams(next)
+    scrollToSearchPanel()
+    window.setTimeout(() => document.getElementById('location')?.focus(), 350)
+  }
+
+  function handleAreaShortcut(zipCode: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('location', zipCode)
+    next.delete('lat')
+    next.delete('lng')
+    setSearchParams(next)
+    scrollToSearchPanel()
   }
 
   function handleSearch(values: SearchFormValues) {
@@ -291,9 +318,13 @@ function HomePage() {
 
       <CompareBar />
 
+      <PopularSpecialties specialties={specialties} onSelect={handleSpecialtyShortcut} />
       <HowItWorks />
+      <SupportedAreas onSelect={handleAreaShortcut} />
       <DataSources />
+      <WhyDocFit />
       <About />
+      <PrivacyAccountMessage />
       <Footer />
     </div>
   )

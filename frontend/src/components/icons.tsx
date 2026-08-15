@@ -220,3 +220,59 @@ export function ShareIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function PrimaryCareIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 10.5V20a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9.5" />
+      <path d="M3.5 11 12 4l8.5 7" />
+      <path d="M12 13v5M9.5 15.5h5" />
+    </svg>
+  )
+}
+
+export function DermatologyIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3.5c3.5 3.8 6 7.2 6 10.3a6 6 0 0 1-12 0c0-3.1 2.5-6.5 6-10.3Z" />
+      <path d="M9.7 14a2.3 2.3 0 0 0 2.3 2.3" />
+    </svg>
+  )
+}
+
+export function OrthopedicsIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6.5 6.5a2.3 2.3 0 1 1 3.6 2.8l5 5a2.3 2.3 0 1 1-2.3 2.3l-5-5A2.3 2.3 0 1 1 6.5 6.5Z" />
+      <path d="m9 9 6 6" />
+    </svg>
+  )
+}
+
+export function PsychiatryIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9.5 4.5a4 4 0 0 1 4 4v.3a3.5 3.5 0 0 1 1.8 6.4 3.2 3.2 0 0 1-3 4.3h-1a2.5 2.5 0 0 1-2.5-2.5v-1.5a3 3 0 0 1-3-3 3 3 0 0 1 .8-2 3.5 3.5 0 0 1 3-6Z" />
+      <path d="M9.5 12.5a2 2 0 0 0 2 2" />
+    </svg>
+  )
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+      <path d="M12 14.5v2" />
+    </svg>
+  )
+}
+
+export function MapPinIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z" />
+      <path d="M9.3 9.5h5.4M12 7.2v4.6" />
+    </svg>
+  )
+}

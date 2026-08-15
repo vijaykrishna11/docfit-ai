@@ -50,6 +50,12 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
   closes, and never sent to the server
 - Provider detail data provenance ("Imported into DocFit AI on...") sourced from a real,
   database-populated `imported_at` timestamp — never a fabricated date
+- "Find care by specialty" homepage shortcuts and an "Explore care near you" area explorer, both
+  driven by real backend reference data (the 5 supported specialties, the demo-area ZIP
+  geography) — clicking either pre-fills the search form rather than showing hardcoded content
+- "Why this result?" on every provider card and detail page: a factual, expandable explanation
+  (matched specialty, approximate distance, NPPES/NPI data source, insurance-not-verified) —
+  never a score, rank, or "best match" claim
 
 ## What it deliberately does not do
 

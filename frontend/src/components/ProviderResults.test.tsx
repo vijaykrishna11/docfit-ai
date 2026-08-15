@@ -30,7 +30,7 @@ describe('ProviderResults', () => {
     expect(screen.getByText('2.5 mi')).toBeInTheDocument()
     expect(screen.getByText(/2776 Pacific Ave/)).toBeInTheDocument()
     expect(screen.getByText('562-595-1911')).toBeInTheDocument()
-    expect(screen.getByText(/1538111547/)).toBeInTheDocument()
+    expect(screen.getByText('NPI 1538111547')).toBeInTheDocument()
 
     const callLink = screen.getByRole('link', { name: /call/i })
     expect(callLink).toHaveAttribute('href', 'tel:5625951911')
@@ -42,6 +42,16 @@ describe('ProviderResults', () => {
 
     expect(screen.getByRole('link', { name: /view details/i })).toHaveAttribute('href', '/providers/1')
     expect(screen.getByRole('checkbox', { name: /compare/i })).toBeInTheDocument()
+  })
+
+  it('shows only factual, verifiable reasons in "Why this result?" -- never a score or ranking claim', () => {
+    renderWithProviders(<ProviderResults status="success" results={[sampleProvider]} originLabel="Long Beach, CA" />)
+
+    expect(screen.getByText(/matches cardiovascular disease specialist/i)).toBeInTheDocument()
+    expect(screen.getByText(/approximately 2\.5 mi from long beach, ca/i)).toBeInTheDocument()
+    expect(screen.getByText(/found in public nppes\/npi data/i)).toBeInTheDocument()
+    expect(screen.getByText(/coverage is not verified/i)).toBeInTheDocument()
+    expect(screen.queryByText(/top match|% match|quality score|recommended provider/i)).not.toBeInTheDocument()
   })
 
   it('renders a no-results message when the search succeeds with an empty list', () => {

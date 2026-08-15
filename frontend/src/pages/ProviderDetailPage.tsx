@@ -16,6 +16,7 @@ import {
   ShareIcon,
 } from '../components/icons'
 import SaveProviderButton from '../components/SaveProviderButton'
+import WhyThisResult from '../components/WhyThisResult'
 import {
   directionsUrl,
   formatDistance,
@@ -220,6 +221,14 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
           ))}
         </ul>
       </section>
+
+      {primaryTaxonomy && (
+        <WhyThisResult
+          specialtyDisplayName={primaryTaxonomy.displayName}
+          npiNumber={detail.npiNumber}
+          distanceMiles={detail.distanceMiles}
+        />
+      )}
 
       <div className="disclaimer-panel">
         <InfoIcon width={18} height={18} />

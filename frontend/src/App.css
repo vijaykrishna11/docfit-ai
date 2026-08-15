@@ -1179,6 +1179,84 @@ button.chip-clear {
   }
 }
 
+/* ---------- Why this result ---------- */
+
+.why-this-result {
+  margin-top: 2px;
+}
+
+.why-this-result summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  user-select: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+.why-this-result-chevron {
+  transition: transform 150ms ease;
+  flex-shrink: 0;
+}
+
+.why-this-result[open] .why-this-result-chevron {
+  transform: rotate(90deg);
+}
+
+.why-this-result-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-bg);
+  border: 1px solid var(--primary-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.why-this-result-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.why-this-result-list svg {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.why-this-result-info svg {
+  color: var(--text-muted);
+}
+
+.why-this-result-footnote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.why-this-result-footnote svg {
+  flex-shrink: 0;
+}
+
 /* ---------- Compare bar ---------- */
 
 .compare-bar {
@@ -1466,6 +1544,181 @@ button.chip-clear {
 .about-boundary {
   font-weight: 600;
   color: var(--text-h) !important;
+}
+
+/* ---------- Popular specialty shortcuts ---------- */
+
+.specialty-shortcut-grid {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  @media (max-width: 560px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.specialty-shortcut-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  padding: 22px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    box-shadow 190ms ease,
+    transform 190ms ease,
+    border-color 190ms ease;
+
+  &:hover {
+    box-shadow: var(--shadow);
+    border-color: var(--primary-border);
+    transform: translateY(-3px);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .specialty-shortcut-card:hover {
+    transform: none;
+  }
+}
+
+.specialty-shortcut-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+/* ---------- Supported area explorer ---------- */
+
+.area-grid {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.area-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.area-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15.5px;
+}
+
+.area-card h3 svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.area-zip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button.area-zip-chip {
+  font: inherit;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-h);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- Why DocFit ---------- */
+
+.why-docfit-grid {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: none;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Privacy-first account message ---------- */
+
+.privacy-account-content {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.privacy-account-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary-bg);
+  color: var(--primary);
+  margin-bottom: 6px;
+}
+
+.privacy-account-content p {
+  color: var(--text);
+}
+
+.privacy-account-list {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-h);
 }
 
 /* ---------- Footer ---------- */

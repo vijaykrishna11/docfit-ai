@@ -1,222 +1,145 @@
-# Premium account & discovery pass — session notes
+# Reliability-first startup-quality pass — session notes
 
 **Branch:** `feature/premium-account-and-discovery` (not merged to `main`)
 
-**Commits on this branch (oldest → newest):**
-1. `a19a829` — feat: add sort direction and location suggestions endpoint
-2. `80b2d78` — feat: add provider detail experience, shareable search URLs, and comparison
-3. `c4173bd` — docs: add DocFit AI project documentation
-4. `a3ab1df` — style: add premium healthcare visual interactions
-5. `c118e69` — feat: add secure DocFit account authentication *(backend)*
-6. `82025d9` — feat: add frontend authentication, saved providers, and saved searches
-7. `8f439fb` — feat: add provider name discovery, recently viewed, and compare persistence
-
-Commits 1–4 predate this task and were already on the branch. Commits 5–7 are this session's
-work: `c118e69` was the backend half (built earlier in this same session, before a context
-summary), `82025d9` and `8f439fb` are the frontend half, built and verified after resuming.
+This pass followed strict priority order: fix the reported API failure and verify auth
+end-to-end first, then add startup-quality UX only where it was concrete and testable. Several
+phases of the requested scope (heavy visual redesign, illustrations, motion, Playwright) were
+intentionally not attempted this session — see "Explicitly skipped" below.
 
 ---
 
-## Auth design
+## Root cause of the reported API error
 
-- Passwords: BCrypt (`BCryptPasswordEncoder`), never logged or stored in plaintext.
-- Access token: JWT (HS256, `io.jsonwebtoken` / JJWT 0.12.6 — a well-supported library, not
-  hand-rolled crypto), 15-minute default TTL, returned in the JSON body only. The frontend
-  (`AuthContext`) keeps it in a React state variable and mirrors it into a module-level variable
-  in `api/client.ts` for request injection — **never** written to `localStorage` or
-  `sessionStorage`.
-- Refresh token: opaque high-entropy random value (32 bytes, `SecureRandom` + URL-safe Base64),
-  **not** a JWT. Only its SHA-256 hash is stored server-side (fast, deterministic hashing is
-  correct here since the token itself is already high-entropy — unlike a password, it doesn't
-  need BCrypt's deliberate slowness). Delivered as an `httpOnly`, `SameSite=Lax` cookie scoped to
-  `/api/auth`, 30-day default TTL.
-- Rotation: every `/api/auth/refresh` call revokes the presented token and issues a new one
-  (single-use). Logout revokes immediately. Verified end-to-end by both an integration test and a
-  live curl session (old token rejected after rotation/logout).
-- Session restore: on app mount, the frontend silently calls `/api/auth/refresh` once. If the
-  browser has a valid refresh cookie, the user is signed back in with no visible flicker; if not,
-  they're simply anonymous — no error is shown for the common "never logged in" case.
-- CORS: a `CorsConfigurationSource` bean (not just `WebMvcConfigurer`, since Spring Security's
-  filter chain runs before MVC) with `allowCredentials(true)` and an explicit origin allow-list —
-  no wildcards, so the credentialed refresh cookie can only be sent from trusted origins.
-- Rate limiting: in-memory sliding window keyed by `IP + normalized email` (not IP alone, so one
-  NAT'd office can't lock out unrelated users; not email alone, so it also slows down credential
-  stuffing against a single account). Explicitly documented as single-instance, not distributed —
-  acceptable for this deployment's scale, called out as a known limitation below.
-- Authorization boundary: every saved-provider/saved-search read or write derives the user from
-  the authenticated principal parsed off the JWT (`AuthenticatedUser` record) — a client-supplied
-  user ID is never trusted, never even accepted as a parameter.
+The homepage's "Unable to load specialties and insurance carriers. Is the API running?" banner
+was accurate: the backend process was simply not running (confirmed via direct `curl` to
+`:8080`, which failed to connect; Postgres was up and healthy). `VITE_API_BASE_URL`, CORS, and
+the frontend fetch wrapper were all already correctly configured — no code was broken there. No
+unnecessary code changes were made for this part; it's documented here rather than "fixed."
 
-## Database migrations
+## Two real bugs found and fixed while verifying the fix live
 
-`V5__create_account_and_saved_data.sql` — adds `app_user`, `refresh_token`, `saved_provider`,
-`saved_search`, and `ALTER TABLE provider ADD COLUMN imported_at TIMESTAMPTZ NOT NULL DEFAULT
-now()`. The 271 existing provider rows got `now()` as their `imported_at` on migration — an
-honest "we don't actually know when NPPES originally created this record, so we're recording when
-DocFit AI imported it" value, never a fabricated historical date.
+Restarting the backend and hitting it directly surfaced two genuine, previously undetected
+regressions — neither would have been caught without live HTTP testing against a real server:
 
-## Sign-in / register functionality
+1. **Every error response from the entire API was being corrupted into a bare, bodyless 401.**
+   `SecurityConfig` didn't permit Spring Boot's internal `/error` forward (the container-level
+   re-dispatch Boot performs after any unhandled exception). That forward has no `Authentication`
+   in its context, so Spring Security's `ExceptionTranslationFilter` intercepted it and the
+   custom `authenticationEntryPoint` overwrote the *real* status and body (400/404/409/...) with
+   an empty 401 — for the `providers/{id}` 404, the `providers/search` 400 validation, and every
+   auth error alike. `MockMvc`-based tests never caught this because `MockMvc` doesn't reproduce
+   this container-level dispatch. Fixed by adding `/error` to the `permitAll` list. Added
+   `ErrorResponseIntegrationTest` — a `@SpringBootTest(webEnvironment = RANDOM_PORT)` test using a
+   plain JDK `HttpClient` against the real embedded server — so this class of bug can't silently
+   regress again.
+2. **`server.error.include-message`/`include-binding-errors` were configured under the Spring
+   Boot 3 property names.** Boot 4 relocated them to `spring.web.error.*`; the old names
+   silently no-op to their defaults (`never`) rather than failing to start. This meant no real
+   backend error message (e.g. "Invalid email or password.", "An account with this email already
+   exists.") had reached the frontend at all since the auth pass began, even before bug #1.
+   Fixed the property names.
 
-`/signin` and `/register`, split-screen layout, DocFit wordmark, no OAuth buttons, no "Forgot
-password" link (not implemented, so not shown as if it were). Both surface real server error text
-("An account with this email already exists.", "Invalid email or password.") via the backend's
-`server.error.include-message=always` setting, with a generic fallback for network failures.
-Registration validates password length client-side (≥8 chars) before ever calling the API.
+Both were verified fixed via live `curl` against the restarted backend (real 404/400/409/401
+bodies now contain the correct status *and* a real `message` field) and by the full backend test
+suite (38/38 passing, up from 35, including the new regression test).
 
-## Saved-provider functionality
+## Auth verified end-to-end (live, against a real Postgres-backed backend)
 
-Heart-icon toggle on every `ProviderCard` and a labeled "Save provider" button on the detail
-page (`SaveProviderButton`, shared component). Anonymous click → redirect to `/signin` with the
-intended provider and return path preserved in the URL → completing sign-in/register saves the
-provider and returns to the original page. `/saved` lists all saved providers with Call /
-Directions / View details / Remove. Backed by `SavedProvidersContext`, which only fetches once
-authenticated and clears on sign-out.
+Register → BCrypt-hashed password confirmed directly in the database (not plaintext) → wrong
+password gives a generic, non-account-revealing "Invalid email or password." → same generic
+message for a nonexistent email (no account-enumeration leak) → correct login → session persists
+across a simulated "browser refresh" (`/api/auth/refresh` using only the httpOnly cookie, no
+access token) → logout revokes the cookie → a post-logout refresh attempt correctly fails →
+anonymous requests to `/api/saved-providers` correctly get 401 → anonymous search, specialties,
+and insurance-carrier endpoints are completely unaffected by any of the above.
 
-## Saved-search functionality
+## New homepage sections (reliability-scoped, not a redesign)
 
-"Save this search" appears in the results toolbar **only when signed in** and only after a
-successful search — never automatic, never a checkbox pre-checked by default. `/saved-searches`
-lists saved searches with "Run search" (rebuilds the `/` query string) and "Remove."
+The hero, layout, teal/navy identity, and search form were left untouched, per instruction.
+Added, in the sequence suggested by the task:
 
-## Privacy decisions
+- **Find care by specialty** — cards for the 5 real backend specialties (original icons per
+  specialty); clicking one fills the Specialty field, scrolls to the search panel, and focuses
+  Location, without auto-submitting a search.
+- **Explore care near you** — grouped by city from the real `zip_geography` reference data (via
+  the existing `/api/locations/suggestions` endpoint with an empty query), not a hardcoded list;
+  clicking a ZIP fills Location. Explicitly labeled as limited demo coverage.
+- **Why DocFit** ("Healthcare directories shouldn't feel like a maze.") — three factual
+  differentiators: transparent results, privacy-first search, real public provider data.
+- **Search freely. Save what matters.** — privacy-first account messaging, shown only to
+  anonymous visitors (hidden once signed in), explaining that accounts are opt-in and exist only
+  for saving providers/searches.
+- **Why this result?** — added to every provider card and the detail page: an accessible native
+  `<details>` disclosure showing the matched specialty, approximate distance and origin, the
+  NPPES/NPI data source, and an explicit "insurance not verified" note. Never a score or ranking
+  claim (covered by a dedicated frontend test asserting no "best/top match/% match/quality score"
+  language appears).
+- The homepage reference-data failure banner was changed from a loud, full-width `error-panel`
+  to a compact inline notice with a Retry button, and now distinguishes "can't reach the server"
+  from "the server returned an error" instead of one generic message for both.
 
-- Saved searches are opt-in only — confirmed by a dedicated backend IDOR test suite and by the
-  UI never calling the save-search endpoint outside the explicit toolbar button.
-- Recently-viewed providers live in `sessionStorage` only (never sent to the server, cleared by
-  the user or when the tab closes) — this is a browser convenience, not an account feature.
-- Compare selection persists in `sessionStorage` for the same reason (survive an accidental
-  reload), also never sent anywhere.
-- Geolocation coordinates, when used, still appear in shareable search URLs at full precision —
-  unchanged from the prior session's flagged decision, still worth a product-owner call on
-  whether to round them.
+## Tests
 
-## Unique features added this pass
+- Backend: **38/38 passing** (`./mvnw --batch-mode verify`, BUILD SUCCESS) — 35 previous + 3 new
+  in `ErrorResponseIntegrationTest`.
+- Frontend: **25/25 passing** (`npm run test`) — 24 previous + 1 new assertion set on
+  `ProviderResults.test.tsx` covering the "Why this result?" panel's factual-only content.
+  `npm run typecheck` and `npm run lint` both clean (only the pre-existing fast-refresh warnings
+  on context files).
+- Build: `npm run build` succeeds — 305.5 kB JS / 91.2 kB gzip, 35.9 kB CSS / 6.5 kB gzip (up
+  modestly from 297/89 kB and 31.5/6 kB before this pass's homepage sections; no heavy assets,
+  video, or animation libraries were added).
 
-- Provider name search ("Already know who you're looking for?") — debounced, backed by
-  `GET /api/providers/by-name`.
-- Data provenance on the detail page ("Imported into DocFit AI on...") from the real
-  `imported_at` column.
-- Share button (Clipboard API) on the provider detail page, alongside the existing search-share
-  button.
+## Database review
 
-## Frontend routes
+Reviewed `app_user`, `refresh_token`, `saved_provider`, `saved_search`: correct FKs, a unique
+constraint on `app_user.email` and on `saved_provider(user_id, provider_id)`, and indexes on
+every `user_id` foreign key used for saved-data lookups. No `ON DELETE CASCADE` runs from
+`provider` in either direction, so deleting saved data (or a whole account) can never touch
+provider records; account deletion cascades explicitly in `AuthService.deleteAccount()` instead
+of relying on DB-level cascade. No migration changes were needed.
 
-`/`, `/providers/:id`, `/compare`, `/signin`, `/register`, `/account` (protected),
-`/saved` (protected), `/saved-searches` (protected), `*` → 404 page.
+## Explicitly skipped this pass, and why
 
-## Backend endpoints (new this pass)
+Given the reliability-first mandate, these requested phases were not attempted, to avoid
+"blindly adding features" on top of an app that had just been confirmed broken:
 
-`POST /api/auth/{register,login,refresh,logout}`, `GET/PATCH/DELETE /api/auth/me`,
-`GET/POST/DELETE /api/saved-providers[/{id}]`, `GET/POST/PATCH/DELETE /api/saved-searches[/{id}]`,
-`GET /api/providers/by-name`. Full request/response shapes documented in `API.md`.
+- Full homepage visual rhythm rework (asymmetrical layouts, new illustrations, background
+  shifts beyond the existing `page-section-muted`/`page-section-navy` alternation) — the new
+  sections use the existing visual language rather than introducing a new one.
+- Provider discovery preview section with real loaded providers (Phase 6) — would add API load
+  to the homepage for a presentational-only section; deferred pending a decision on how to keep
+  it lightweight.
+- Data Sources / About / Footer copy rewrites (Phases 21–23) — existing copy is already accurate
+  and reasonably framed; rewriting it wasn't load-bearing for reliability or for the specific
+  features requested elsewhere in this pass.
+- New motion/micro-interactions beyond what already existed (Phase 20).
+- Playwright E2E (Phase 31) — still not configured in the repo; per instruction, only extended if
+  already present.
+- Formal accessibility audit tool and visual responsive screenshots (Phases 29/34) — no
+  browser/screenshot tool was available; relied on code review of existing breakpoints and the
+  same CSS patterns already used elsewhere on the page.
 
-## Tests added
+## Known limitations (carried over, still true)
 
-- Backend: `AuthControllerTest` (6 — register/duplicate/login/wrong-password/refresh-rotation/
-  logout-revocation/me), `SavedProviderAuthorizationTest` (3, including a live IDOR attempt),
-  `SavedSearchAuthorizationTest` (2, including a live IDOR attempt).
-- Frontend: `SignInPage.test.tsx` (3), `RegisterPage.test.tsx` (3), `ProtectedRoute.test.tsx` (2),
-  `SaveProviderButton.test.tsx` (2, covering both the anonymous-redirect and authenticated-save
-  paths).
-
-## Test results
-
-- Backend: `./mvnw --batch-mode verify` → **35/35 passing**, BUILD SUCCESS.
-- Frontend: `npm run typecheck` clean, `npm run lint` clean (3 pre-existing fast-refresh warnings
-  on context files, not new problems), `npm run test` → **24/24 passing**, `npm run build` →
-  succeeds (297 kB JS / 89 kB gzip, 31.5 kB CSS / 6 kB gzip).
-
-## E2E result
-
-No browser-automation tool was available in this session (checked; none registered). In its
-place, a full curl-driven pass against the actually-running backend + Postgres verified:
-register (with the real frontend `Origin` header, confirming CORS + credentialed cookie both
-work), login, `/me`, save a real provider, a second registered user attempting to delete the
-first user's saved provider (**IDOR blocked** — no-op, first user's data intact), refresh token
-rotation, logout revocation (post-logout refresh correctly rejected), anonymous access to
-`/api/saved-providers` correctly rejected (401), and anonymous provider search still working
-(200). All frontend logic paths (sign-in, register, protected-route redirect, anonymous vs.
-authenticated save) are additionally covered by the 10 new Testing-Library tests above, which do
-exercise the real component tree. **A manual browser click-through pass is still recommended**
-when a browser is available.
-
-## Security findings
-
-- One real bug found and fixed during this session: `AuthController` was passing a hardcoded
-  literal (`"register"` / `"login"`) as the rate-limit key instead of a real per-client
-  identifier, meaning the rate limit bucket was shared across every user rather than being
-  per-IP+email. Fixed by deriving the key from the actual client IP + normalized email inside
-  `AuthService`. No other findings.
-
-## Accessibility findings
-
-Followed the existing codebase's conventions (labeled inputs, `aria-live`, `aria-pressed` on
-toggles, `aria-expanded`/`aria-haspopup` on the account menu, focus-visible states, Escape-to-
-close on the account dropdown and mobile menu). No dedicated automated a11y audit (e.g. axe) was
-run this session — same gap as the prior session's notes; still worth a formal pass.
-
-## Performance / bundle impact
-
-Production bundle grew from 262.7 kB → 293.97 kB JS (before this pass's discovery features) →
-297.32 kB JS / 89.13 kB gzip with the full auth + saved-data + discovery feature set; CSS grew
-from ~20 kB to 31.5 kB / 6 kB gzip. Still a single small bundle, no code-splitting needed at this
-size.
-
-## Known limitations
-
-- Rate limiting is in-memory/single-instance, not distributed — fine for one backend instance,
-  would need a shared store (e.g. Redis) behind a load balancer. Documented, not hidden.
-- No password-reset flow — the UI reflects this honestly (no dead "Forgot password" link) rather
-  than promising something unbuilt.
-- No formal accessibility audit tool was run.
-- No live browser E2E (no browser-automation tool available) — substituted with curl-driven
-  backend E2E plus the full automated frontend test suite.
-- Geolocation coordinates remain unrounded in shareable URLs — flagged for product-owner review,
-  not resolved.
-
-## Features skipped, and why
-
-- **Map/list view (Leaflet)** — skipped. The demo geography is only 6 ZIP centroids; a map would
-  visually imply house-level precision the data doesn't have. Not worth the honesty risk for this
-  dataset's scale.
-- **Filter drawer / advanced taxonomy filter** — skipped. The existing filter-chip + toolbar
-  pattern already covers the current filter surface (specialty, location, radius); a drawer would
-  be premature UI complexity for the number of filters that actually exist.
-- **Command palette** — skipped. Low value at this app's size (8 routes); would be pure novelty.
-- **First-visit product tour** — skipped. The homepage's How It Works / Data Sources / About
-  sections and inline empty-state copy already explain the product; a tour would be redundant.
-- **Favorite-specialties dashboard** — skipped as a separate feature; saved searches already
-  cover "get back to a specialty I care about" without a second, overlapping mechanism.
-- **Dedicated `/data` and `/how-it-works` routes** — skipped; this content already lives on the
-  homepage as anchored sections and splitting it into separate routes wouldn't add real value.
-- **Playwright E2E** — not newly introduced (wasn't configured in the repo before this session,
-  and the instructions said to extend it only if it already existed).
-
-Nothing above was skipped for being "risky" in the sense of the stop-conditions — these were
-deliberate, documented scope calls, not abandoned or blocked work.
-
-## Branch push result
-
-Not yet pushed as of writing this file — will push after this final documentation commit, per the
-session's git-safety instructions (create commits, push the feature branch; never merge to
-`main`).
+Rate limiting is in-memory/single-instance; no password reset flow (honestly omitted); demo
+geography is 6 ZIPs; insurance is informational-only.
 
 ## Suggested next 10 improvements
 
-1. Manual browser click-through QA (sign-in, save-provider redirect flow, account menu, mobile
-   viewport) once a browser/screenshot tool is available — the one meaningful verification gap
-   this session couldn't close itself.
-2. Formal accessibility audit (axe or similar) across the new auth/account pages.
-3. Decide on rounding/obfuscating geolocation coordinates in shareable search URLs (flagged,
-   unresolved, across two sessions now).
-4. Real password-reset flow (email-based), if/when an email-sending service is approved.
-5. Distributed rate limiting (Redis-backed) if DocFit AI ever runs more than one backend
-   instance.
-6. Expand demo geography beyond the current 6 Long Beach-area ZIPs.
-7. Real insurance-compatibility data source (currently explicitly informational-only).
-8. A lightweight, honest map view once the underlying geography data has real street-level
-   precision to show (currently ZIP-centroid only).
-9. "Why this result?" factual explainability panel (e.g. "matched your specialty search," "within
-   your 25-mile radius") — scoped out of this pass for time, still a good small follow-up.
-10. Rename/organize saved searches beyond the current flat list, if usage shows people saving
-    more than a handful.
+1. Manual browser click-through QA once a browser tool is available — the one verification gap
+   this session (and the previous one) couldn't close itself.
+2. Homepage provider-discovery preview (Phase 6), scoped to avoid extra homepage API load (e.g.
+   a static curated set of 3 real provider IDs fetched once, cached).
+3. Visual rhythm pass on Data Sources / About / Footer (Phases 21–23) now that reliability is
+   confirmed.
+4. Formal accessibility audit (axe or similar).
+5. Playwright E2E setup, if the team wants automated real-browser coverage going forward.
+6. Distributed rate limiting if DocFit AI ever runs more than one backend instance.
+7. Real password-reset flow.
+8. Expand demo geography beyond 6 ZIPs.
+9. Real insurance-compatibility data source.
+10. Consider adding a lightweight synthetic/smoke test (e.g. a scheduled `curl` health check)
+    that would have caught "backend not running" automatically in a real deployment, since this
+    session's root cause was exactly that class of issue.

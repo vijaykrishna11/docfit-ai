@@ -186,7 +186,7 @@ function ProviderResults({
         <>
           <ul className="provider-list">
             {results.map((provider, index) => (
-              <ProviderCard key={provider.id} provider={provider} entranceIndex={index} />
+              <ProviderCard key={provider.id} provider={provider} entranceIndex={index} originLabel={originLabel} />
             ))}
           </ul>
 
