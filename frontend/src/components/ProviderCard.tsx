@@ -1,41 +1,28 @@
+import { Link } from 'react-router-dom'
 import type { ProviderSearchResultDto } from '../api/types'
-import { BadgeIcon, LocationIcon, PhoneIcon } from './icons'
-
-function titleCase(value: string): string {
-  return value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-}
-
-function providerName(provider: ProviderSearchResultDto): string {
-  if (provider.organizationName) {
-    return titleCase(provider.organizationName)
-  }
-  const parts = [provider.firstName, provider.lastName].filter((part): part is string => Boolean(part))
-  return parts.length > 0 ? titleCase(parts.join(' ')) : 'Unknown provider'
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-}
-
-function formatDistance(miles: number): string {
-  return miles >= 0 && miles < 1 ? '< 1 mi' : `${miles} mi`
-}
+import { useCompare } from '../context/CompareContext'
+import {
+  directionsUrl,
+  formatDistance,
+  formattedAddress,
+  initialsFor,
+  providerDisplayName,
+  telHref,
+} from '../utils/providerDisplay'
+import { BadgeIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
 
 function ProviderCard({ provider }: { provider: ProviderSearchResultDto }) {
-  const name = providerName(provider)
-  const address = `${titleCase(provider.addressLine1)}${
-    provider.addressLine2 ? `, ${titleCase(provider.addressLine2)}` : ''
-  }`
-  const cityLine = `${titleCase(provider.city)}, ${provider.stateCode} ${provider.postalCode}`
+  const { isSelected, toggle, isFull } = useCompare()
+  const name = providerDisplayName(provider)
+  const { line1, line2 } = formattedAddress(provider)
+  const selected = isSelected(provider.id)
+  const disableCompareToggle = !selected && isFull
 
   return (
     <li className="provider-card">
       <div className="provider-card-top">
         <div className="avatar" aria-hidden="true">
-          {initials(name)}
+          {initialsFor(name)}
         </div>
         <div className="provider-card-heading">
           <h3>{name}</h3>
@@ -51,9 +38,9 @@ function ProviderCard({ provider }: { provider: ProviderSearchResultDto }) {
         <p className="detail">
           <LocationIcon width={16} height={16} />
           <span>
-            {address}
+            {line1}
             <br />
-            {cityLine}
+            {line2}
           </span>
         </p>
         {provider.phone && (
@@ -66,6 +53,29 @@ function ProviderCard({ provider }: { provider: ProviderSearchResultDto }) {
           <BadgeIcon width={14} height={14} />
           <span>NPI {provider.npiNumber}</span>
         </p>
+      </div>
+
+      <div className="provider-card-actions">
+        <label className="compare-checkbox">
+          <input type="checkbox" checked={selected} disabled={disableCompareToggle} onChange={() => toggle(provider.id)} />
+          Compare
+        </label>
+
+        <div className="provider-card-buttons">
+          {provider.phone && (
+            <a className="ghost-button" href={telHref(provider.phone)}>
+              <PhoneIcon width={14} height={14} />
+              Call
+            </a>
+          )}
+          <a className="ghost-button" href={directionsUrl(provider)} target="_blank" rel="noopener noreferrer">
+            <DirectionsIcon width={14} height={14} />
+            Directions
+          </a>
+          <Link className="ghost-button" to={`/providers/${provider.id}`}>
+            View details
+          </Link>
+        </div>
       </div>
     </li>
   )

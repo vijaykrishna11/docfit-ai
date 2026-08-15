@@ -1,7 +1,7 @@
-import type { ProviderSearchResultDto } from '../api/types'
+import type { ProviderSearchResultDto, SortOption } from '../api/types'
 import ProviderCard from './ProviderCard'
 import ProviderCardSkeleton from './ProviderCardSkeleton'
-import { AlertIcon } from './icons'
+import { AlertIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons'
 
 export type SearchStatus = 'idle' | 'loading' | 'error' | 'success'
 
@@ -12,7 +12,16 @@ interface ProviderResultsProps {
   specialtyName?: string
   originLabel?: string | null
   radiusMiles?: number
+  totalElements?: number
+  page?: number
+  totalPages?: number
+  sort?: SortOption
+  onSortChange?: (sort: SortOption) => void
+  onPageChange?: (page: number) => void
   onRetry?: () => void
+  onClearSearch?: () => void
+  onShare?: () => void
+  shareCopied?: boolean
 }
 
 function ProviderResults({
@@ -22,7 +31,16 @@ function ProviderResults({
   specialtyName,
   originLabel,
   radiusMiles = 25,
+  totalElements,
+  page = 0,
+  totalPages = 0,
+  sort = 'distance',
+  onSortChange,
+  onPageChange,
   onRetry,
+  onClearSearch,
+  onShare,
+  shareCopied = false,
 }: ProviderResultsProps) {
   if (status === 'idle') {
     return null
@@ -61,17 +79,59 @@ function ProviderResults({
   }
 
   const headingLabel = originLabel ?? 'your location'
+  const effectiveTotal = totalElements ?? results.length
 
   return (
     <section className="results-section" aria-live="polite">
-      <div className="results-heading">
-        <h2>Providers near {headingLabel}</h2>
+      <div className="results-toolbar">
+        <div className="results-heading">
+          <h2>Providers near {headingLabel}</h2>
+          {results.length > 0 && (
+            <p className="results-subtext">
+              {effectiveTotal} provider{effectiveTotal === 1 ? '' : 's'} within {radiusMiles} miles of{' '}
+              {headingLabel}
+            </p>
+          )}
+        </div>
+
         {results.length > 0 && (
-          <p className="results-subtext">
-            Showing {specialtyName ? `${specialtyName.toLowerCase()} ` : ''}providers within{' '}
-            {radiusMiles} miles
-          </p>
+          <div className="results-actions">
+            <label className="sort-control">
+              <span>Sort</span>
+              <select
+                className="plain-select"
+                value={sort}
+                onChange={(event) => onSortChange?.(event.target.value as SortOption)}
+              >
+                <option value="distance">Nearest</option>
+                <option value="name">Name A–Z</option>
+                <option value="name-desc">Name Z–A</option>
+              </select>
+            </label>
+
+            {onShare && (
+              <button type="button" className="secondary-button" onClick={onShare}>
+                Share search
+              </button>
+            )}
+          </div>
         )}
+      </div>
+
+      <div className="filter-chips">
+        {specialtyName && <span className="chip">{specialtyName}</span>}
+        {originLabel && <span className="chip">{originLabel}</span>}
+        <span className="chip">{radiusMiles} miles</span>
+        {onClearSearch && (
+          <button type="button" className="chip chip-clear" onClick={onClearSearch}>
+            <CloseIcon width={12} height={12} />
+            Clear search
+          </button>
+        )}
+      </div>
+
+      <div aria-live="polite" className="share-confirmation-region">
+        {shareCopied && <span className="share-confirmation">Search link copied</span>}
       </div>
 
       {results.length === 0 ? (
@@ -86,11 +146,39 @@ function ProviderResults({
           </p>
         </div>
       ) : (
-        <ul className="provider-list">
-          {results.map((provider) => (
-            <ProviderCard key={provider.id} provider={provider} />
-          ))}
-        </ul>
+        <>
+          <ul className="provider-list">
+            {results.map((provider) => (
+              <ProviderCard key={provider.id} provider={provider} />
+            ))}
+          </ul>
+
+          {totalPages > 1 && (
+            <nav className="pagination" aria-label="Search results pages">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onPageChange?.(page - 1)}
+                disabled={page <= 0}
+              >
+                <ChevronLeftIcon width={14} height={14} />
+                Previous
+              </button>
+              <span className="pagination-status">
+                Page {page + 1} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onPageChange?.(page + 1)}
+                disabled={page >= totalPages - 1}
+              >
+                Next
+                <ChevronRightIcon width={14} height={14} />
+              </button>
+            </nav>
+          )}
+        </>
       )}
     </section>
   )

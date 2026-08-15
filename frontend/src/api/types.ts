@@ -58,4 +58,11 @@ export interface ProviderDetailDto {
   taxonomies: ProviderTaxonomyDto[]
 }
 
-export type SortOption = 'distance' | 'name'
+export type SortOption = 'distance' | 'name' | 'name-desc'
+
+export interface LocationSuggestionDto {
+  zipCode: string
+  city: string
+  stateCode: string
+  label: string
+}

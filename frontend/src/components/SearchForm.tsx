@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import type { InsuranceCarrierDto, SpecialtyDto } from '../api/types'
+import { useEffect, useState, type FormEvent } from 'react'
+import { fetchLocationSuggestions } from '../api/client'
+import type { InsuranceCarrierDto, LocationSuggestionDto, SpecialtyDto } from '../api/types'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { CheckIcon, CloseIcon, CrosshairIcon, InsuranceIcon, LocationIcon, SearchIcon, SpecialtyIcon } from './icons'
 
@@ -12,6 +13,13 @@ export interface SearchFormValues {
   lng?: number
 }
 
+export interface SearchFormInitialValues {
+  specialty?: string
+  insuranceCarrierId?: string
+  location?: string
+  radius?: number
+}
+
 const RADIUS_OPTIONS = [5, 10, 25, 50] as const
 
 interface SearchFormProps {
@@ -19,20 +27,49 @@ interface SearchFormProps {
   insuranceCarriers: InsuranceCarrierDto[]
   onSearch: (values: SearchFormValues) => void
   disabled?: boolean
+  initialValues?: SearchFormInitialValues
 }
 
-function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false }: SearchFormProps) {
-  const [specialty, setSpecialty] = useState('')
-  const [insuranceCarrierId, setInsuranceCarrierId] = useState('')
-  const [locationText, setLocationText] = useState('')
-  const [radius, setRadius] = useState(25)
+function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false, initialValues }: SearchFormProps) {
+  const [specialty, setSpecialty] = useState(initialValues?.specialty ?? '')
+  const [insuranceCarrierId, setInsuranceCarrierId] = useState(initialValues?.insuranceCarrierId ?? '')
+  const [locationText, setLocationText] = useState(initialValues?.location ?? '')
+  const [radius, setRadius] = useState(initialValues?.radius ?? 25)
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestionDto[]>([])
   const geolocation = useGeolocation()
 
   const usingCurrentLocation = geolocation.status === 'granted' && geolocation.coords != null
 
+  useEffect(() => {
+    if (usingCurrentLocation || locationText.trim().length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clears suggestions on empty query
+      setLocationSuggestions([])
+      return
+    }
+    let cancelled = false
+    const timeoutId = window.setTimeout(() => {
+      fetchLocationSuggestions(locationText.trim())
+        .then((suggestions) => {
+          if (!cancelled) setLocationSuggestions(suggestions)
+        })
+        .catch(() => {
+          if (!cancelled) setLocationSuggestions([])
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [locationText, usingCurrentLocation])
+
   function handleClearLocation() {
     geolocation.reset()
     setLocationText('')
+  }
+
+  function resolveLocationValue(): string {
+    const matchedSuggestion = locationSuggestions.find((suggestion) => suggestion.label === locationText)
+    return matchedSuggestion ? matchedSuggestion.zipCode : locationText
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -40,7 +77,7 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
     if (usingCurrentLocation && geolocation.coords) {
       onSearch({ specialty, insuranceCarrierId, radius, lat: geolocation.coords.lat, lng: geolocation.coords.lng })
     } else {
-      onSearch({ specialty, insuranceCarrierId, radius, location: locationText })
+      onSearch({ specialty, insuranceCarrierId, radius, location: resolveLocationValue() })
     }
   }
 
@@ -95,12 +132,19 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
             id="location"
             name="location"
             type="text"
+            list="location-suggestions"
             placeholder="ZIP, city, or city, state"
             value={usingCurrentLocation ? 'Current location' : locationText}
             onChange={(event) => setLocationText(event.target.value)}
             readOnly={usingCurrentLocation}
             required={!usingCurrentLocation}
+            autoComplete="off"
           />
+          <datalist id="location-suggestions">
+            {locationSuggestions.map((suggestion) => (
+              <option key={suggestion.zipCode} value={suggestion.label} />
+            ))}
+          </datalist>
           {usingCurrentLocation && (
             <button
               type="button"

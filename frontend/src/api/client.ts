@@ -1,5 +1,6 @@
 import type {
   InsuranceCarrierDto,
+  LocationSuggestionDto,
   ProviderDetailDto,
   ProviderSearchResponseDto,
   SortOption,
@@ -93,4 +94,9 @@ export function fetchProviderDetail(id: number, origin: ProviderDetailParams = {
   }
   const query = params.toString()
   return getJson<ProviderDetailDto>(`/api/providers/${id}${query ? `?${query}` : ''}`)
+}
+
+export function fetchLocationSuggestions(query: string): Promise<LocationSuggestionDto[]> {
+  const params = new URLSearchParams({ q: query })
+  return getJson<LocationSuggestionDto[]>(`/api/locations/suggestions?${params.toString()}`)
 }
