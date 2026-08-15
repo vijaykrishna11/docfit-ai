@@ -1,10 +1,9 @@
 package com.docfitai.backend;
 
+import com.docfitai.backend.testsupport.PostgresIntegrationSupport;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class BackendApplicationTests {
+class BackendApplicationTests extends PostgresIntegrationSupport {
 
 	@Test
 	void contextLoads() {
