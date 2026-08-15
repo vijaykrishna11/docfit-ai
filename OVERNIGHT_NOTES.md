@@ -1,156 +1,222 @@
-# Overnight product polish — session notes
+# Premium account & discovery pass — session notes
 
-**Branch:** `feature/overnight-product-polish` (not merged to `main`)
+**Branch:** `feature/premium-account-and-discovery` (not merged to `main`)
 
-**Commits so far:**
+**Commits on this branch (oldest → newest):**
 1. `a19a829` — feat: add sort direction and location suggestions endpoint
 2. `80b2d78` — feat: add provider detail experience, shareable search URLs, and comparison
-3. (this commit) — docs: add project documentation
+3. `c4173bd` — docs: add DocFit AI project documentation
+4. `a3ab1df` — style: add premium healthcare visual interactions
+5. `c118e69` — feat: add secure DocFit account authentication *(backend)*
+6. `82025d9` — feat: add frontend authentication, saved providers, and saved searches
+7. `8f439fb` — feat: add provider name discovery, recently viewed, and compare persistence
+
+Commits 1–4 predate this task and were already on the branch. Commits 5–7 are this session's
+work: `c118e69` was the backend half (built earlier in this same session, before a context
+summary), `82025d9` and `8f439fb` are the frontend half, built and verified after resuming.
 
 ---
 
-## Completed work
+## Auth design
 
-### Backend
-- `sort=name-desc` added alongside existing `distance`/`name` sorting.
-- New `GET /api/locations/suggestions?q=` endpoint, backed entirely by the local
-  `zip_geography` reference table (no external geocoder, no paid service).
-- Investigated potential duplicate provider/taxonomy rows in the real imported dataset (271
-  providers): **none found**. 19 providers legitimately carry multiple taxonomies (already
-  correctly deduped by the existing best-match-per-provider search logic) — not a bug.
-- Reviewed the search query's `EXPLAIN` plan: at current data scale, Postgres correctly chooses
-  sequential scans over the existing indexes. No new indexes/migration added — would be
-  premature optimization at this scale.
-- No new Flyway migration was needed this session.
+- Passwords: BCrypt (`BCryptPasswordEncoder`), never logged or stored in plaintext.
+- Access token: JWT (HS256, `io.jsonwebtoken` / JJWT 0.12.6 — a well-supported library, not
+  hand-rolled crypto), 15-minute default TTL, returned in the JSON body only. The frontend
+  (`AuthContext`) keeps it in a React state variable and mirrors it into a module-level variable
+  in `api/client.ts` for request injection — **never** written to `localStorage` or
+  `sessionStorage`.
+- Refresh token: opaque high-entropy random value (32 bytes, `SecureRandom` + URL-safe Base64),
+  **not** a JWT. Only its SHA-256 hash is stored server-side (fast, deterministic hashing is
+  correct here since the token itself is already high-entropy — unlike a password, it doesn't
+  need BCrypt's deliberate slowness). Delivered as an `httpOnly`, `SameSite=Lax` cookie scoped to
+  `/api/auth`, 30-day default TTL.
+- Rotation: every `/api/auth/refresh` call revokes the presented token and issues a new one
+  (single-use). Logout revokes immediately. Verified end-to-end by both an integration test and a
+  live curl session (old token rejected after rotation/logout).
+- Session restore: on app mount, the frontend silently calls `/api/auth/refresh` once. If the
+  browser has a valid refresh cookie, the user is signed back in with no visible flicker; if not,
+  they're simply anonymous — no error is shown for the common "never logged in" case.
+- CORS: a `CorsConfigurationSource` bean (not just `WebMvcConfigurer`, since Spring Security's
+  filter chain runs before MVC) with `allowCredentials(true)` and an explicit origin allow-list —
+  no wildcards, so the credentialed refresh cookie can only be sent from trusted origins.
+- Rate limiting: in-memory sliding window keyed by `IP + normalized email` (not IP alone, so one
+  NAT'd office can't lock out unrelated users; not email alone, so it also slows down credential
+  stuffing against a single account). Explicitly documented as single-instance, not distributed —
+  acceptable for this deployment's scale, called out as a known limitation below.
+- Authorization boundary: every saved-provider/saved-search read or write derives the user from
+  the authenticated principal parsed off the JWT (`AuthenticatedUser` record) — a client-supplied
+  user ID is never trusted, never even accepted as a parameter.
 
-### Frontend
-- **Routing**: added `react-router-dom` (small, standard, justified dependency). `App.tsx` is
-  now the router shell (`/`, `/providers/:id`, `/compare`), wrapped in a `CompareProvider`.
-- **Provider detail page** (`/providers/:id`): name/org, specialty, full taxonomy list, NPI,
-  address, phone, distance from the active search (when available), data-source notice,
-  insurance-unverified notice, working Call (`tel:`) and Get Directions (public Google Maps
-  URL, no API key) actions, "Back to results" via browser history.
-- **Shareable search URLs**: specialty/location/lat/lng/radius/sort/page/insurance all live in
-  the `/` query string. Refresh, copy/paste, and Back/Forward all reproduce the same search. A
-  "Share search" button copies the URL and shows an accessible "Search link copied" confirmation.
-- **Provider comparison**: checkbox on each card (max 3), a sticky compare bar, and
-  `/compare?ids=1,2,3` rendering a factual comparison table (name, specialty, distance, address,
-  phone, NPI, taxonomy, Call/Directions/View provider) — explicitly no ratings or quality claims.
-- **Results toolbar**: live sort control, "N providers within X miles of Y" summary, filter
-  chips (specialty/location/radius) with a single "Clear search" action, and
-  Previous/Page X of Y/Next pagination using the API's existing `page`/`totalPages`.
-- **Provider cards**: every action now works — Call only renders when a phone exists, Directions
-  always works from the address, View details routes to the detail page, Compare toggles
-  selection.
-- **Location suggestions UI**: a native `<datalist>` on the Location field, debounced against
-  the new suggestions endpoint.
-- **Homepage completed**: real How It Works / Data Sources / About sections, a Footer with
-  working links (including GitHub), and a keyboard-accessible mobile menu (Escape closes,
-  correct `aria-expanded`/`aria-controls`, no new dependency).
+## Database migrations
 
-### Tests added this session
-- Backend: 50-mile-radius test, invalid-location-400 test, `name-desc` sort test, 4 tests for
-  `LocationSuggestionService` — **24/24 backend tests pass**.
-- Frontend: extended `ProviderResults` test to cover Call/Directions/View-details/Compare;
-  `ProviderDetailPage.test.tsx` (renders + 404 handling); `ComparePage.test.tsx` (renders table +
-  empty state) — **14/14 frontend tests pass**.
+`V5__create_account_and_saved_data.sql` — adds `app_user`, `refresh_token`, `saved_provider`,
+`saved_search`, and `ALTER TABLE provider ADD COLUMN imported_at TIMESTAMPTZ NOT NULL DEFAULT
+now()`. The 271 existing provider rows got `now()` as their `imported_at` on migration — an
+honest "we don't actually know when NPPES originally created this record, so we're recording when
+DocFit AI imported it" value, never a fabricated historical date.
 
-### Build/verify results
-- `./mvnw --batch-mode verify` → BUILD SUCCESS, 24/24 tests.
-- `npm run typecheck` / `lint` / `test` / `build` → all pass (14/14 tests; production bundle
-  262.7 kB JS / 82 kB gzip, 19.7 kB CSS / 4.2 kB gzip — still lightweight).
+## Sign-in / register functionality
 
-### Manual verification performed
-All via direct `curl` against a locally running backend (real Postgres, real imported NPPES
-data) — **no fabricated results**:
-- Cardiology + 90802 + 25mi → 200, 4 results
-- Cardiology + 90815 + 50mi → 200, 4 results
-- Primary Care + 90815 + 10mi → 200, 41 results (3 pages)
-- Psychiatry/Mental Health + 90815 + 25mi, `sort=name-desc` → 200, 134 results (7 pages)
-- Edge cases: unknown ZIP → 400, blank location → 400, missing specialty → 400, 0-result search
-  → 200 with empty array, unknown provider ID → 404, location suggestions for "long" → 4 correct
-  matches.
+`/signin` and `/register`, split-screen layout, DocFit wordmark, no OAuth buttons, no "Forgot
+password" link (not implemented, so not shown as if it were). Both surface real server error text
+("An account with this email already exists.", "Invalid email or password.") via the backend's
+`server.error.include-message=always` setting, with a generic fallback for network failures.
+Registration validates password length client-side (≥8 chars) before ever calling the API.
 
-**Not performed:** actual browser interaction (clicking through the UI, resizing a viewport to
-375/390/768px, testing geolocation permission prompts). No browser/screenshot tool was available
-in this session. All frontend behavior was verified through automated tests (which do exercise
-the real component tree via Testing Library) and careful reading of the CSS breakpoints, not by
-looking at a rendered page. **Please do a manual pass when you're back.**
+## Saved-provider functionality
 
----
+Heart-icon toggle on every `ProviderCard` and a labeled "Save provider" button on the detail
+page (`SaveProviderButton`, shared component). Anonymous click → redirect to `/signin` with the
+intended provider and return path preserved in the URL → completing sign-in/register saves the
+provider and returns to the original page. `/saved` lists all saved providers with Call /
+Directions / View details / Remove. Backed by `SavedProvidersContext`, which only fetches once
+authenticated and clears on sign-out.
 
-## Skipped work (and why)
+## Saved-search functionality
 
-- **"About this data" expandable section** — skipped; the Data Sources homepage section and the
-  provider-detail data notice already cover the same ground without an extra interactive widget.
-- **Rounding/obfuscating geolocation coordinates in shareable URLs** — not done; coordinates are
-  included at full precision when a search uses "Use my location." Flagged below for your
-  review rather than guessing at a privacy tradeoff.
-- **Individually-removable filter chips** — implemented as read-only chips + one "Clear search"
-  action instead, since the instructions marked per-chip removal as optional and a single clear
-  action already covers the "easy to clear/edit" requirement.
-- **Formal WCAG contrast audit** — not run; relied on the previously-established color palette
-  (deep navy on light backgrounds) without a dedicated contrast-checking pass.
+"Save this search" appears in the results toolbar **only when signed in** and only after a
+successful search — never automatic, never a checkbox pre-checked by default. `/saved-searches`
+lists saved searches with "Run search" (rebuilds the `/` query string) and "Remove."
 
-Nothing was skipped for being "risky" or "blocking" in the sense the instructions meant — the
-items above were deliberate, low-value-for-the-time scope calls, not abandoned features.
+## Privacy decisions
 
----
+- Saved searches are opt-in only — confirmed by a dedicated backend IDOR test suite and by the
+  UI never calling the save-search endpoint outside the explicit toolbar button.
+- Recently-viewed providers live in `sessionStorage` only (never sent to the server, cleared by
+  the user or when the tab closes) — this is a browser convenience, not an account feature.
+- Compare selection persists in `sessionStorage` for the same reason (survive an accidental
+  reload), also never sent anywhere.
+- Geolocation coordinates, when used, still appear in shareable search URLs at full precision —
+  unchanged from the prior session's flagged decision, still worth a product-owner call on
+  whether to round them.
 
-## Bugs found
+## Unique features added this pass
 
-None new. (The one real regression from the prior session — a frontend/backend API contract
-mismatch causing HTTP 400s — was already diagnosed, fixed, tested, and pushed to `main` before
-this overnight session started.)
+- Provider name search ("Already know who you're looking for?") — debounced, backed by
+  `GET /api/providers/by-name`.
+- Data provenance on the detail page ("Imported into DocFit AI on...") from the real
+  `imported_at` column.
+- Share button (Clipboard API) on the provider detail page, alongside the existing search-share
+  button.
 
----
+## Frontend routes
 
-## Decisions that need your review
+`/`, `/providers/:id`, `/compare`, `/signin`, `/register`, `/account` (protected),
+`/saved` (protected), `/saved-searches` (protected), `*` → 404 page.
 
-1. **Shareable URL lives on `/`, not `/search`.** The instructions' example was
-   `/search?specialty=...`, but DocFit AI's hero and search panel are on one page, and you
-   explicitly said not to redesign that. I kept the search UI on `/` and put all search state in
-   its query string instead (`/?specialty=CARDIOLOGY&location=90802&radius=25&sort=distance`).
-   Functionally identical (bookmarkable, Back/Forward-safe, refresh-safe) but not the literal
-   path from the example. Say the word if you'd rather have a dedicated `/search` route.
-2. **`eslint-plugin-react-hooks@7.1.1`'s "recommended" preset now bundles the stricter React
-   Compiler rule set**, including `set-state-in-effect`, which flags React's own documented
-   data-fetching-effect pattern (`setState('loading')` → `fetch().then(setData)`, with a
-   cancellation flag). I added scoped `eslint-disable-next-line` comments with justification at
-   4 call sites (`SearchForm`, `HomePage`, `ComparePage`, `ProviderDetailPage`) rather than
-   contort correct code to satisfy an experimental rule. Worth a look if you want the codebase
-   fully compiler-clean — the alternative is restructuring fetch effects into a small shared
-   hook, which is a reasonable follow-up, not a red flag.
-3. **Provider detail/comparison always fetch fresh from the backend**, even when the provider
-   data is already in memory from a just-run search. This makes `/providers/:id` and
-   `/compare?ids=...` work standalone from a shared link (no dependency on prior app state), at
-   the cost of one extra small API call per provider when navigating from search results. A
-   reasonable simplicity/robustness tradeoff; flagging in case you'd rather optimize it later.
-4. **Insurance stays purely informational**, exactly as required — never sent to the search API,
-   never implies acceptance. Confirmed via a dedicated frontend test asserting the search request
-   never contains an `insurance` param.
+## Backend endpoints (new this pass)
 
----
+`POST /api/auth/{register,login,refresh,logout}`, `GET/PATCH/DELETE /api/auth/me`,
+`GET/POST/DELETE /api/saved-providers[/{id}]`, `GET/POST/PATCH/DELETE /api/saved-searches[/{id}]`,
+`GET /api/providers/by-name`. Full request/response shapes documented in `API.md`.
+
+## Tests added
+
+- Backend: `AuthControllerTest` (6 — register/duplicate/login/wrong-password/refresh-rotation/
+  logout-revocation/me), `SavedProviderAuthorizationTest` (3, including a live IDOR attempt),
+  `SavedSearchAuthorizationTest` (2, including a live IDOR attempt).
+- Frontend: `SignInPage.test.tsx` (3), `RegisterPage.test.tsx` (3), `ProtectedRoute.test.tsx` (2),
+  `SaveProviderButton.test.tsx` (2, covering both the anonymous-redirect and authenticated-save
+  paths).
+
+## Test results
+
+- Backend: `./mvnw --batch-mode verify` → **35/35 passing**, BUILD SUCCESS.
+- Frontend: `npm run typecheck` clean, `npm run lint` clean (3 pre-existing fast-refresh warnings
+  on context files, not new problems), `npm run test` → **24/24 passing**, `npm run build` →
+  succeeds (297 kB JS / 89 kB gzip, 31.5 kB CSS / 6 kB gzip).
+
+## E2E result
+
+No browser-automation tool was available in this session (checked; none registered). In its
+place, a full curl-driven pass against the actually-running backend + Postgres verified:
+register (with the real frontend `Origin` header, confirming CORS + credentialed cookie both
+work), login, `/me`, save a real provider, a second registered user attempting to delete the
+first user's saved provider (**IDOR blocked** — no-op, first user's data intact), refresh token
+rotation, logout revocation (post-logout refresh correctly rejected), anonymous access to
+`/api/saved-providers` correctly rejected (401), and anonymous provider search still working
+(200). All frontend logic paths (sign-in, register, protected-route redirect, anonymous vs.
+authenticated save) are additionally covered by the 10 new Testing-Library tests above, which do
+exercise the real component tree. **A manual browser click-through pass is still recommended**
+when a browser is available.
+
+## Security findings
+
+- One real bug found and fixed during this session: `AuthController` was passing a hardcoded
+  literal (`"register"` / `"login"`) as the rate-limit key instead of a real per-client
+  identifier, meaning the rate limit bucket was shared across every user rather than being
+  per-IP+email. Fixed by deriving the key from the actual client IP + normalized email inside
+  `AuthService`. No other findings.
+
+## Accessibility findings
+
+Followed the existing codebase's conventions (labeled inputs, `aria-live`, `aria-pressed` on
+toggles, `aria-expanded`/`aria-haspopup` on the account menu, focus-visible states, Escape-to-
+close on the account dropdown and mobile menu). No dedicated automated a11y audit (e.g. axe) was
+run this session — same gap as the prior session's notes; still worth a formal pass.
+
+## Performance / bundle impact
+
+Production bundle grew from 262.7 kB → 293.97 kB JS (before this pass's discovery features) →
+297.32 kB JS / 89.13 kB gzip with the full auth + saved-data + discovery feature set; CSS grew
+from ~20 kB to 31.5 kB / 6 kB gzip. Still a single small bundle, no code-splitting needed at this
+size.
 
 ## Known limitations
 
-- Demo geography is still just 6 Long Beach-area ZIPs (90802, 90803, 90806, 90815, 90712,
-  90755). Location search and suggestions only work within that area — clearly stated in the
-  UI's empty state, the Data Sources section, and the README, not hidden.
-- No manual browser/visual QA this session (see above).
-- No new database indexes/migrations were added; fine at 271 rows, worth revisiting at real
-  scale.
+- Rate limiting is in-memory/single-instance, not distributed — fine for one backend instance,
+  would need a shared store (e.g. Redis) behind a load balancer. Documented, not hidden.
+- No password-reset flow — the UI reflects this honestly (no dead "Forgot password" link) rather
+  than promising something unbuilt.
+- No formal accessibility audit tool was run.
+- No live browser E2E (no browser-automation tool available) — substituted with curl-driven
+  backend E2E plus the full automated frontend test suite.
+- Geolocation coordinates remain unrounded in shareable URLs — flagged for product-owner review,
+  not resolved.
 
----
+## Features skipped, and why
 
-## Suggested next 5 priorities
+- **Map/list view (Leaflet)** — skipped. The demo geography is only 6 ZIP centroids; a map would
+  visually imply house-level precision the data doesn't have. Not worth the honesty risk for this
+  dataset's scale.
+- **Filter drawer / advanced taxonomy filter** — skipped. The existing filter-chip + toolbar
+  pattern already covers the current filter surface (specialty, location, radius); a drawer would
+  be premature UI complexity for the number of filters that actually exist.
+- **Command palette** — skipped. Low value at this app's size (8 routes); would be pure novelty.
+- **First-visit product tour** — skipped. The homepage's How It Works / Data Sources / About
+  sections and inline empty-state copy already explain the product; a tour would be redundant.
+- **Favorite-specialties dashboard** — skipped as a separate feature; saved searches already
+  cover "get back to a specialty I care about" without a second, overlapping mechanism.
+- **Dedicated `/data` and `/how-it-works` routes** — skipped; this content already lives on the
+  homepage as anchored sections and splitting it into separate routes wouldn't add real value.
+- **Playwright E2E** — not newly introduced (wasn't configured in the repo before this session,
+  and the instructions said to extend it only if it already existed).
 
-1. Manual browser QA pass across 375px / 390px / 768px / desktop — mobile menu, search panel
-   wrapping, sticky compare bar, and the detail/compare pages, specifically checking for
-   horizontal overflow.
-2. Decide on the `react-hooks/set-state-in-effect` disables (keep vs. restructure fetch effects
-   into a shared hook).
-3. Expand demo geography if the product should feel less narrowly scoped than "Long Beach only."
-4. Real insurance-compatibility data source integration (currently explicitly out of scope).
-5. Reuse in-memory search-result data for provider detail/comparison instead of always
-   re-fetching, if the extra API calls become a real cost.
+Nothing above was skipped for being "risky" in the sense of the stop-conditions — these were
+deliberate, documented scope calls, not abandoned or blocked work.
+
+## Branch push result
+
+Not yet pushed as of writing this file — will push after this final documentation commit, per the
+session's git-safety instructions (create commits, push the feature branch; never merge to
+`main`).
+
+## Suggested next 10 improvements
+
+1. Manual browser click-through QA (sign-in, save-provider redirect flow, account menu, mobile
+   viewport) once a browser/screenshot tool is available — the one meaningful verification gap
+   this session couldn't close itself.
+2. Formal accessibility audit (axe or similar) across the new auth/account pages.
+3. Decide on rounding/obfuscating geolocation coordinates in shareable search URLs (flagged,
+   unresolved, across two sessions now).
+4. Real password-reset flow (email-based), if/when an email-sending service is approved.
+5. Distributed rate limiting (Redis-backed) if DocFit AI ever runs more than one backend
+   instance.
+6. Expand demo geography beyond the current 6 Long Beach-area ZIPs.
+7. Real insurance-compatibility data source (currently explicitly informational-only).
+8. A lightweight, honest map view once the underlying geography data has real street-level
+   precision to show (currently ZIP-centroid only).
+9. "Why this result?" factual explainability panel (e.g. "matched your specialty search," "within
+   your 25-mile radius") — scoped out of this pass for time, still a good small follow-up.
+10. Rename/organize saved searches beyond the current flat list, if usage shows people saving
+    more than a handful.

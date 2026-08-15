@@ -38,6 +38,18 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
   the search API and never implies a provider accepts a given plan
 - Responsive, accessible UI: keyboard-navigable mobile menu, focus-visible states, `aria-live`
   search status, `prefers-reduced-motion` support
+- Provider name search ("Already know who you're looking for?") for finding a specific provider
+  directly, without a specialty/location search
+- Optional free account (email + password): sign in/register with the access token kept in
+  memory only (never `localStorage`) and a rotating, revocable `httpOnly` refresh cookie
+- Saved providers: an explicit heart/save toggle on any provider card or detail page, viewable at
+  `/saved`. Signing in is never required to search — only to save.
+- Saved searches: an explicit "Save this search" action in the results toolbar, viewable at
+  `/saved-searches`. DocFit AI never records a search automatically.
+- Recently viewed providers: kept in `sessionStorage` only, cleared by the user or when the tab
+  closes, and never sent to the server
+- Provider detail data provenance ("Imported into DocFit AI on...") sourced from a real,
+  database-populated `imported_at` timestamp — never a fabricated date
 
 ## What it deliberately does not do
 
@@ -50,7 +62,9 @@ does not claim insurance acceptance without a real compatibility source.
 
 **Backend**
 - Java 21
-- Spring Boot (Web, Data JPA, Validation)
+- Spring Boot (Web, Data JPA, Validation, Security)
+- JJWT (`io.jsonwebtoken`) for access-token signing — a well-supported library, not hand-rolled
+  cryptography
 - PostgreSQL
 - Flyway (schema + reference-data migrations)
 - Maven
@@ -58,7 +72,7 @@ does not claim insurance acceptance without a real compatibility source.
 **Frontend**
 - React 19 + TypeScript
 - Vite
-- React Router (client-side routing for search, provider detail, and comparison)
+- React Router (client-side routing for search, provider detail, comparison, and account pages)
 
 **Infrastructure**
 - Docker (PostgreSQL via `docker-compose.yml`)
@@ -136,6 +150,19 @@ npm run dev
 Open `http://localhost:5173`. It talks to the backend via `VITE_API_BASE_URL`, which defaults
 to `http://localhost:8080` (see `frontend/.env.example`).
 
+### Auth environment variables (backend)
+
+All have safe local defaults (see `backend/src/main/resources/application.properties`); override
+via environment variables for anything beyond local dev:
+
+| Variable | Default (local only) | Notes |
+|---|---|---|
+| `JWT_SECRET` | an insecure placeholder | **Must** be overridden (256+ bit random value) outside local dev |
+| `ACCESS_TOKEN_TTL_MINUTES` | `15` | Access token lifetime |
+| `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
+| `AUTH_COOKIE_SECURE` | `false` | Set `true` in any real (HTTPS) deployment |
+| `AUTH_RATE_LIMIT_MAX_ATTEMPTS` / `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `10` / `5` | In-memory, per-IP+email sliding-window limiter on register/login — single-instance only, not distributed (documented limitation, not a bug) |
+
 > **Windows PowerShell note:** if `npm` is blocked by PowerShell's script-execution policy
 > (`npm.ps1 cannot be loaded...`), use `npm.cmd` instead (e.g. `npm.cmd install`,
 > `npm.cmd run dev`), or run the commands from Git Bash / WSL instead of native PowerShell.
@@ -168,7 +195,10 @@ Reasonable future directions, not yet built:
 - Expanded provider geography beyond the current Long Beach / LA demo area
 - Richer provider profiles (hours, languages, accepting-new-patients where reliably sourced)
 - Provider availability integration, only where a reliable data source exists
-- User accounts, saved providers, and search history
+- Password reset (deliberately not implemented yet — no "Forgot password" link is shown rather
+  than promising a flow that doesn't work)
+- A real map view, if one can be built without implying more location precision than the demo
+  ZIP-centroid geography actually has
 
 ## Healthcare boundary
 
