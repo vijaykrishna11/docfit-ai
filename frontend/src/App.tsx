@@ -1,121 +1,94 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useState } from 'react'
 import './App.css'
+import { fetchInsuranceCarriers, fetchSpecialties, searchProviders } from './api/client'
+import type { InsuranceCarrierDto, ProviderSearchResultDto, SpecialtyDto } from './api/types'
+import SearchForm, { type SearchFormValues } from './components/SearchForm'
+import ProviderResults, { type SearchStatus } from './components/ProviderResults'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [specialties, setSpecialties] = useState<SpecialtyDto[]>([])
+  const [insuranceCarriers, setInsuranceCarriers] = useState<InsuranceCarrierDto[]>([])
+  const [referenceDataError, setReferenceDataError] = useState<string | null>(null)
+
+  const [status, setStatus] = useState<SearchStatus>('idle')
+  const [results, setResults] = useState<ProviderSearchResultDto[]>([])
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
+  const [selectedInsuranceId, setSelectedInsuranceId] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    Promise.all([fetchSpecialties(), fetchInsuranceCarriers()])
+      .then(([specialtyList, carrierList]) => {
+        if (cancelled) return
+        setSpecialties(specialtyList)
+        setInsuranceCarriers(carrierList)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setReferenceDataError('Unable to load specialties and insurance carriers. Is the API running?')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function handleSearch(values: SearchFormValues) {
+    setSelectedInsuranceId(values.insuranceCarrierId)
+    setStatus('loading')
+    setErrorMessage(undefined)
+    try {
+      const response = await searchProviders({ specialty: values.specialty, zip: values.zip })
+      setResults(response.results)
+      setStatus('success')
+    } catch (error) {
+      setResults([])
+      setStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
+    }
+  }
+
+  const selectedCarrierName = insuranceCarriers.find(
+    (carrier) => String(carrier.id) === selectedInsuranceId,
+  )?.name
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+    <div className="page">
+      <header className="page-header">
+        <h1>DocFit AI</h1>
+        <p className="tagline">Find healthcare providers that fit your needs.</p>
+      </header>
+
+      <main>
+        {referenceDataError && (
+          <p className="status-message error" role="alert">
+            {referenceDataError}
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        )}
 
-      <div className="ticks"></div>
+        <SearchForm
+          specialties={specialties}
+          insuranceCarriers={insuranceCarriers}
+          onSearch={handleSearch}
+          disabled={status === 'loading'}
+        />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <p className="disclaimer">
+          Insurance information is for demo purposes only. Confirm coverage directly with the
+          provider or insurer.
+        </p>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {status === 'success' && selectedCarrierName && (
+          <p className="insurance-note">
+            Insurance filter (&ldquo;{selectedCarrierName}&rdquo;) is informational only and does
+            not affect these results.
+          </p>
+        )}
+
+        <ProviderResults status={status} results={results} errorMessage={errorMessage} />
+      </main>
+    </div>
   )
 }
 
