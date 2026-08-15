@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { fetchInsuranceCarriers, fetchSpecialties, searchProviders } from './api/client'
 import type { InsuranceCarrierDto, ProviderSearchResultDto, SpecialtyDto } from './api/types'
+import Header from './components/Header'
+import Hero from './components/Hero'
+import { InfoIcon } from './components/icons'
 import SearchForm, { type SearchFormValues } from './components/SearchForm'
 import ProviderResults, { type SearchStatus } from './components/ProviderResults'
+
+const SEARCH_RADIUS_MILES = 25
 
 function App() {
   const [specialties, setSpecialties] = useState<SpecialtyDto[]>([])
@@ -13,7 +18,7 @@ function App() {
   const [status, setStatus] = useState<SearchStatus>('idle')
   const [results, setResults] = useState<ProviderSearchResultDto[]>([])
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
-  const [selectedInsuranceId, setSelectedInsuranceId] = useState('')
+  const [lastSearch, setLastSearch] = useState<SearchFormValues | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -34,8 +39,8 @@ function App() {
     }
   }, [])
 
-  async function handleSearch(values: SearchFormValues) {
-    setSelectedInsuranceId(values.insuranceCarrierId)
+  async function runSearch(values: SearchFormValues) {
+    setLastSearch(values)
     setStatus('loading')
     setErrorMessage(undefined)
     try {
@@ -49,44 +54,65 @@ function App() {
     }
   }
 
+  function handleRetry() {
+    if (lastSearch) {
+      void runSearch(lastSearch)
+    }
+  }
+
   const selectedCarrierName = insuranceCarriers.find(
-    (carrier) => String(carrier.id) === selectedInsuranceId,
+    (carrier) => String(carrier.id) === lastSearch?.insuranceCarrierId,
   )?.name
+  const selectedSpecialtyName = specialties.find((s) => s.code === lastSearch?.specialty)?.name
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <h1>DocFit AI</h1>
-        <p className="tagline">Find healthcare providers that fit your needs.</p>
-      </header>
+    <div className="page" id="top">
+      <Header />
+      <Hero />
 
-      <main>
+      <main className="container main-content">
         {referenceDataError && (
-          <p className="status-message error" role="alert">
-            {referenceDataError}
-          </p>
+          <div className="state-panel error-panel" role="alert">
+            <InfoIcon width={20} height={20} />
+            <div className="state-panel-copy">
+              <p>{referenceDataError}</p>
+            </div>
+          </div>
         )}
 
-        <SearchForm
-          specialties={specialties}
-          insuranceCarriers={insuranceCarriers}
-          onSearch={handleSearch}
-          disabled={status === 'loading'}
+        <section className="search-section" id="search-panel">
+          <SearchForm
+            specialties={specialties}
+            insuranceCarriers={insuranceCarriers}
+            onSearch={runSearch}
+            disabled={status === 'loading'}
+          />
+
+          <div className="disclaimer-panel">
+            <InfoIcon width={18} height={18} />
+            <p>
+              Insurance selection is for demonstration only. Coverage is not verified. Confirm
+              directly with the provider or insurer.
+            </p>
+          </div>
+
+          {status === 'success' && selectedCarrierName && (
+            <p className="insurance-note">
+              Insurance filter (&ldquo;{selectedCarrierName}&rdquo;) is informational only and does
+              not affect these results.
+            </p>
+          )}
+        </section>
+
+        <ProviderResults
+          status={status}
+          results={results}
+          errorMessage={errorMessage}
+          specialtyName={selectedSpecialtyName}
+          zip={lastSearch?.zip}
+          radiusMiles={SEARCH_RADIUS_MILES}
+          onRetry={handleRetry}
         />
-
-        <p className="disclaimer">
-          Insurance information is for demo purposes only. Confirm coverage directly with the
-          provider or insurer.
-        </p>
-
-        {status === 'success' && selectedCarrierName && (
-          <p className="insurance-note">
-            Insurance filter (&ldquo;{selectedCarrierName}&rdquo;) is informational only and does
-            not affect these results.
-          </p>
-        )}
-
-        <ProviderResults status={status} results={results} errorMessage={errorMessage} />
       </main>
     </div>
   )

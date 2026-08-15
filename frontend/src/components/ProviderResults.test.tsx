@@ -22,7 +22,7 @@ const sampleProvider: ProviderSearchResultDto = {
 
 describe('ProviderResults', () => {
   it('renders provider cards with name, specialty, distance, address, phone, and NPI', () => {
-    render(<ProviderResults status="success" results={[sampleProvider]} />)
+    render(<ProviderResults status="success" results={[sampleProvider]} zip="90806" />)
 
     expect(screen.getByText('Arun Parvatananeni')).toBeInTheDocument()
     expect(screen.getByText('Cardiovascular Disease Specialist')).toBeInTheDocument()
@@ -33,7 +33,7 @@ describe('ProviderResults', () => {
   })
 
   it('renders a no-results message when the search succeeds with an empty list', () => {
-    render(<ProviderResults status="success" results={[]} />)
+    render(<ProviderResults status="success" results={[]} zip="90802" />)
 
     expect(screen.getByText(/no providers found/i)).toBeInTheDocument()
   })

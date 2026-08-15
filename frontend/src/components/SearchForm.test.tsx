@@ -15,7 +15,7 @@ describe('SearchForm', () => {
     expect(screen.getByLabelText(/specialty/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/insurance/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/zip code/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /find providers/i })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Cardiology' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Aetna' })).toBeInTheDocument()
   })

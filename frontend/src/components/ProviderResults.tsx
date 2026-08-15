@@ -1,5 +1,7 @@
 import type { ProviderSearchResultDto } from '../api/types'
 import ProviderCard from './ProviderCard'
+import ProviderCardSkeleton from './ProviderCardSkeleton'
+import { AlertIcon } from './icons'
 
 export type SearchStatus = 'idle' | 'loading' | 'error' | 'success'
 
@@ -7,44 +9,91 @@ interface ProviderResultsProps {
   status: SearchStatus
   results: ProviderSearchResultDto[]
   errorMessage?: string
+  specialtyName?: string
+  zip?: string
+  radiusMiles?: number
+  onRetry?: () => void
 }
 
-function ProviderResults({ status, results, errorMessage }: ProviderResultsProps) {
+function ProviderResults({
+  status,
+  results,
+  errorMessage,
+  specialtyName,
+  zip,
+  radiusMiles = 25,
+  onRetry,
+}: ProviderResultsProps) {
   if (status === 'idle') {
     return null
   }
 
-  if (status === 'loading') {
-    return (
-      <p className="status-message" role="status">
-        Searching for providers…
-      </p>
-    )
-  }
-
   if (status === 'error') {
     return (
-      <p className="status-message error" role="alert">
-        {errorMessage ?? 'Something went wrong. Please try again.'}
-      </p>
+      <section className="results-section" aria-live="polite">
+        <div className="state-panel error-panel" role="alert">
+          <AlertIcon width={22} height={22} />
+          <div className="state-panel-copy">
+            <h3>We couldn&rsquo;t load provider results</h3>
+            <p>{errorMessage ?? 'The DocFit AI search service is unreachable right now.'}</p>
+            <p className="state-hint">Check your connection and try again.</p>
+          </div>
+          {onRetry && (
+            <button type="button" className="secondary-button" onClick={onRetry}>
+              Retry search
+            </button>
+          )}
+        </div>
+      </section>
     )
   }
 
-  if (results.length === 0) {
+  if (status === 'loading') {
     return (
-      <p className="status-message" role="status">
-        No providers found for that specialty and ZIP code. Try a larger radius or a different
-        specialty.
-      </p>
+      <section className="results-section" aria-live="polite" aria-busy="true">
+        <p className="results-heading-loading">Searching for providers…</p>
+        <ul className="provider-list">
+          <ProviderCardSkeleton />
+          <ProviderCardSkeleton />
+          <ProviderCardSkeleton />
+        </ul>
+      </section>
     )
   }
 
   return (
-    <ul className="provider-list">
-      {results.map((provider) => (
-        <ProviderCard key={provider.id} provider={provider} />
-      ))}
-    </ul>
+    <section className="results-section" aria-live="polite">
+      {zip && (
+        <div className="results-heading">
+          <h2>Providers near {zip}</h2>
+          {results.length > 0 && (
+            <p className="results-subtext">
+              Showing {specialtyName ? `${specialtyName.toLowerCase()} ` : ''}providers within{' '}
+              {radiusMiles} miles
+            </p>
+          )}
+        </div>
+      )}
+
+      {results.length === 0 ? (
+        <div className="state-panel empty-panel">
+          <h3>No providers found nearby</h3>
+          <p>
+            We couldn&rsquo;t find any matching providers within {radiusMiles} miles of {zip}.
+          </p>
+          <p className="state-hint">
+            This demo dataset currently covers a limited Long Beach / Los Angeles area. Try a
+            nearby ZIP such as 90802, 90803, 90806, 90815, 90712, or 90755.
+          </p>
+        </div>
+      ) : (
+        <ul className="provider-list">
+          {results.map((provider) => (
+            <ProviderCard key={provider.id} provider={provider} />
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
