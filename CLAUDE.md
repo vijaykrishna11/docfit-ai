@@ -162,3 +162,41 @@ After meaningful implementation work, summarize:
 - remaining work
 
 Do not create Git commits or push to GitHub unless explicitly asked.
+
+---
+
+## Verified commands
+
+These commands exist and have been run successfully against the current state of the repository.
+Update this section as the project evolves; remove commands that stop working.
+
+### Backend (`backend/`)
+
+- `./mvnw --batch-mode verify` — compiles, runs tests, packages the Spring Boot jar.
+- Built with: Java 21 (Temurin), Spring Boot 4.1.0, Maven Wrapper (Maven 3.9.16).
+- Health check: `GET /actuator/health` (default Spring Boot Actuator endpoint, no custom controller).
+
+### Frontend (`frontend/`)
+
+- `npm ci` — install dependencies from the lockfile.
+- `npm run typecheck` — TypeScript project build check (`tsc -b --noEmit`), no output on success.
+- `npm run lint` — ESLint (flat config) over the project.
+- `npm run test` — Vitest test run (Testing Library + jsdom).
+- `npm run build` — TypeScript build + Vite production build, output to `frontend/dist/`.
+- `npm run dev` — Vite dev server.
+
+### Docker / PostgreSQL
+
+- `cp .env.example .env` — create local environment file (never commit `.env`).
+- `docker compose config` — validate `docker-compose.yml` and confirm env-var substitution.
+- `docker compose up -d postgres` — start PostgreSQL only, with a named volume (`postgres_data`) and a
+  `pg_isready` healthcheck.
+- `docker compose ps` — confirm the container reaches `healthy` status.
+- `docker compose down` — stop and remove the container/network; the named volume is preserved
+  (do not pass `-v` unless data loss is intended).
+
+### CI
+
+- `.github/workflows/ci.yml` runs on push/PR to `main`:
+  - Backend job: Temurin Java 21, `./mvnw --batch-mode verify`.
+  - Frontend job: Node 22, `npm ci`, then typecheck, lint, test, build.
