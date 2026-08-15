@@ -4,7 +4,18 @@ import { ApiError, fetchProviderDetail } from '../api/client'
 import type { ProviderDetailDto } from '../api/types'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
-import { AlertIcon, BadgeIcon, ChevronLeftIcon, DirectionsIcon, InfoIcon, LocationIcon, PhoneIcon } from '../components/icons'
+import {
+  AlertIcon,
+  BadgeIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  DirectionsIcon,
+  InfoIcon,
+  LocationIcon,
+  PhoneIcon,
+  ShareIcon,
+} from '../components/icons'
+import SaveProviderButton from '../components/SaveProviderButton'
 import {
   directionsUrl,
   formatDistance,
@@ -101,6 +112,17 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
   const name = providerDisplayName(detail)
   const { line1, line2 } = formattedAddress(detail)
   const primaryTaxonomy = detail.taxonomies.find((taxonomy) => taxonomy.primaryTaxonomy) ?? detail.taxonomies[0]
+  const [shareCopied, setShareCopied] = useState(false)
+
+  async function handleShare() {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setShareCopied(true)
+      window.setTimeout(() => setShareCopied(false), 2500)
+    } catch {
+      // Clipboard access can be denied by the browser -- fail quietly rather than show a raw error.
+    }
+  }
 
   return (
     <article className="provider-detail-card">
@@ -133,6 +155,20 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
           <DirectionsIcon width={16} height={16} />
           Get directions
         </a>
+        <SaveProviderButton providerId={detail.id} variant="labeled" />
+        <button type="button" className={`secondary-button${shareCopied ? ' is-success' : ''}`} onClick={handleShare}>
+          {shareCopied ? (
+            <>
+              <CheckIcon width={16} height={16} />
+              Link copied
+            </>
+          ) : (
+            <>
+              <ShareIcon width={16} height={16} />
+              Share
+            </>
+          )}
+        </button>
       </div>
 
       <dl className="provider-detail-grid">
@@ -190,6 +226,18 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
         <InfoIcon width={18} height={18} />
         <p>Insurance coverage is not verified in this demo. Confirm directly with the provider or insurer.</p>
       </div>
+
+      {detail.importedAt && (
+        <p className="provenance-note">
+          Imported into DocFit AI on{' '}
+          {new Date(detail.importedAt).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}{' '}
+          from public NPPES/NPI records.
+        </p>
+      )}
     </article>
   )
 }

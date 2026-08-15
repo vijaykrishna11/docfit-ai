@@ -19,6 +19,7 @@ function makeDetail(id: number, name: string): ProviderDetailDto {
     stateCode: 'CA',
     postalCode: '90802',
     distanceMiles: 1.2,
+    importedAt: '2026-01-01T00:00:00Z',
     taxonomies: [
       {
         taxonomyCode: '207RC0000X',

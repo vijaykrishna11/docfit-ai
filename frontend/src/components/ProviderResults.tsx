@@ -22,6 +22,9 @@ interface ProviderResultsProps {
   onClearSearch?: () => void
   onShare?: () => void
   shareCopied?: boolean
+  onSaveSearch?: () => void
+  isSavingSearch?: boolean
+  searchSaved?: boolean
 }
 
 function ProviderResults({
@@ -41,6 +44,9 @@ function ProviderResults({
   onClearSearch,
   onShare,
   shareCopied = false,
+  onSaveSearch,
+  isSavingSearch = false,
+  searchSaved = false,
 }: ProviderResultsProps) {
   if (status === 'idle') {
     return null
@@ -123,6 +129,25 @@ function ProviderResults({
                   </>
                 ) : (
                   'Share search'
+                )}
+              </button>
+            )}
+
+            {onSaveSearch && (
+              <button
+                type="button"
+                className={`secondary-button${searchSaved ? ' is-success' : ''}`}
+                onClick={onSaveSearch}
+                disabled={isSavingSearch || searchSaved}
+                aria-live="polite"
+              >
+                {searchSaved ? (
+                  <>
+                    <CheckIcon width={14} height={14} />
+                    Search saved
+                  </>
+                ) : (
+                  'Save this search'
                 )}
               </button>
             )}

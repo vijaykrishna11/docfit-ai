@@ -11,6 +11,7 @@ import {
   telHref,
 } from '../utils/providerDisplay'
 import { BadgeIcon, CheckIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
+import SaveProviderButton from './SaveProviderButton'
 
 const MAX_STAGGER_INDEX = 8
 const STAGGER_STEP_MS = 35
@@ -40,10 +41,13 @@ function ProviderCard({ provider, entranceIndex = 0 }: ProviderCardProps) {
           <h3>{name}</h3>
           <span className="specialty-badge">{provider.specialtyDisplayName}</span>
         </div>
-        <span className="distance-badge">
-          <LocationIcon width={13} height={13} />
-          {formatDistance(provider.distanceMiles)}
-        </span>
+        <div className="provider-card-top-actions">
+          <span className="distance-badge">
+            <LocationIcon width={13} height={13} />
+            {formatDistance(provider.distanceMiles)}
+          </span>
+          <SaveProviderButton providerId={provider.id} />
+        </div>
       </div>
 
       <div className="provider-card-details">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ApiError, fetchInsuranceCarriers, fetchSpecialties, searchProviders } from '../api/client'
+import { ApiError, fetchInsuranceCarriers, fetchSpecialties, saveSearch, searchProviders } from '../api/client'
 import type { InsuranceCarrierDto, ProviderSearchResultDto, SortOption, SpecialtyDto } from '../api/types'
 import About from '../components/About'
 import CompareBar from '../components/CompareBar'
@@ -12,12 +12,14 @@ import HowItWorks from '../components/HowItWorks'
 import { InfoIcon } from '../components/icons'
 import ProviderResults, { type SearchStatus } from '../components/ProviderResults'
 import SearchForm, { type SearchFormValues } from '../components/SearchForm'
+import { useAuth } from '../context/AuthContext'
 
 const UNREACHABLE_MESSAGE = 'Unable to reach the search service. Please try again.'
 const DEFAULT_RADIUS = 25
 const DEFAULT_SORT: SortOption = 'distance'
 
 function HomePage() {
+  const { isAuthenticated } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [specialties, setSpecialties] = useState<SpecialtyDto[]>([])
@@ -31,6 +33,8 @@ function HomePage() {
   const [totalPages, setTotalPages] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
   const [shareCopied, setShareCopied] = useState(false)
+  const [isSavingSearch, setIsSavingSearch] = useState(false)
+  const [searchSaved, setSearchSaved] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -96,9 +100,29 @@ function HomePage() {
       setStatus('idle')
       setResults([])
     }
+    setSearchSaved(false)
     // Search re-runs only when the URL-derived search criteria actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specialty, location, lat, lng, radius, sort, page])
+
+  async function handleSaveSearch() {
+    setIsSavingSearch(true)
+    try {
+      await saveSearch({
+        specialtyCode: specialty,
+        locationText: lat && lng ? undefined : location || undefined,
+        latitude: lat ? Number(lat) : undefined,
+        longitude: lng ? Number(lng) : undefined,
+        radius: radius || DEFAULT_RADIUS,
+        sort,
+      })
+      setSearchSaved(true)
+    } catch {
+      // Non-fatal: the toolbar simply stays in its unsaved state if the request failed.
+    } finally {
+      setIsSavingSearch(false)
+    }
+  }
 
   function handleSearch(values: SearchFormValues) {
     const next = new URLSearchParams()
@@ -223,6 +247,9 @@ function HomePage() {
           onClearSearch={hasSearch ? handleClearSearch : undefined}
           onShare={status === 'success' ? handleShare : undefined}
           shareCopied={shareCopied}
+          onSaveSearch={status === 'success' && isAuthenticated ? handleSaveSearch : undefined}
+          isSavingSearch={isSavingSearch}
+          searchSaved={searchSaved}
         />
       </main>
 
