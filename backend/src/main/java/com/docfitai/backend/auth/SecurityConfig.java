@@ -40,6 +40,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**")
                         .permitAll()
+                        // Spring Boot's default error handling forwards failed requests to /error
+                        // internally (an unauthenticated, container-level forward). Without this,
+                        // that forward itself gets rejected by the rule below and the
+                        // authenticationEntryPoint below overwrites every error response --
+                        // regardless of its real status (400/404/409/...) -- with a bare, bodyless
+                        // 401. This must stay permitAll for any real error body to ever reach the
+                        // client.
+                        .requestMatchers("/error")
+                        .permitAll()
                         .requestMatchers("/api/auth/**")
                         .permitAll()
                         .requestMatchers(

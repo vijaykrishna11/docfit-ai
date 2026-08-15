@@ -27,6 +27,7 @@ function HomePage() {
   const [specialties, setSpecialties] = useState<SpecialtyDto[]>([])
   const [insuranceCarriers, setInsuranceCarriers] = useState<InsuranceCarrierDto[]>([])
   const [referenceDataError, setReferenceDataError] = useState<string | null>(null)
+  const [referenceDataLoading, setReferenceDataLoading] = useState(true)
 
   const [status, setStatus] = useState<SearchStatus>('idle')
   const [results, setResults] = useState<ProviderSearchResultDto[]>([])
@@ -38,22 +39,45 @@ function HomePage() {
   const [isSavingSearch, setIsSavingSearch] = useState(false)
   const [searchSaved, setSearchSaved] = useState(false)
 
-  useEffect(() => {
+  function loadReferenceData(): () => void {
     let cancelled = false
+    setReferenceDataLoading(true)
+    setReferenceDataError(null)
     Promise.all([fetchSpecialties(), fetchInsuranceCarriers()])
       .then(([specialtyList, carrierList]) => {
         if (cancelled) return
         setSpecialties(specialtyList)
         setInsuranceCarriers(carrierList)
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return
-        setReferenceDataError('Unable to load specialties and insurance carriers. Is the API running?')
+        // status === null means the request never reached a server (network/DNS failure,
+        // or the backend process isn't running at all) -- a different failure mode from the
+        // backend responding with an actual error, so the two get distinct, honest copy.
+        const unreachable = error instanceof ApiError && error.status === null
+        setReferenceDataError(
+          unreachable
+            ? "We can't reach the DocFit AI server right now. It may be starting up or temporarily offline."
+            : 'Specialties and insurance options failed to load. This is a temporary issue on our end.',
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setReferenceDataLoading(false)
       })
     return () => {
       cancelled = true
     }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch-on-mount pattern; retries are user-triggered via handleRetryReferenceData
+    const cancel = loadReferenceData()
+    return cancel
   }, [])
+
+  function handleRetryReferenceData() {
+    loadReferenceData()
+  }
 
   const specialty = searchParams.get('specialty') ?? ''
   const location = searchParams.get('location') ?? ''
@@ -198,11 +222,17 @@ function HomePage() {
 
       <main className="container main-content">
         {referenceDataError && (
-          <div className="state-panel error-panel" role="alert">
-            <InfoIcon width={20} height={20} />
-            <div className="state-panel-copy">
-              <p>{referenceDataError}</p>
-            </div>
+          <div className="inline-notice" role="alert">
+            <InfoIcon width={16} height={16} />
+            <p>{referenceDataError}</p>
+            <button
+              type="button"
+              className="inline-notice-retry"
+              onClick={handleRetryReferenceData}
+              disabled={referenceDataLoading}
+            >
+              {referenceDataLoading ? 'Retrying…' : 'Retry'}
+            </button>
           </div>
         )}
 
