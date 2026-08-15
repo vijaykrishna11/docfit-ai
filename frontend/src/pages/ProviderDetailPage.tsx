@@ -24,6 +24,7 @@ import {
   providerDisplayName,
   telHref,
 } from '../utils/providerDisplay'
+import { recordRecentlyViewed } from '../utils/recentlyViewed'
 
 type DetailStatus = 'loading' | 'success' | 'error' | 'not-found'
 
@@ -57,6 +58,12 @@ function ProviderDetailPage() {
         if (cancelled) return
         setDetail(result)
         setStatus('success')
+        const primaryTaxonomy = result.taxonomies.find((t) => t.primaryTaxonomy) ?? result.taxonomies[0]
+        recordRecentlyViewed({
+          id: result.id,
+          name: providerDisplayName(result),
+          specialtyDisplayName: primaryTaxonomy?.displayName ?? null,
+        })
       })
       .catch((error: unknown) => {
         if (cancelled) return

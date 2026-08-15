@@ -10,7 +10,9 @@ import Header from '../components/Header'
 import Hero from '../components/Hero'
 import HowItWorks from '../components/HowItWorks'
 import { InfoIcon } from '../components/icons'
+import ProviderNameSearch from '../components/ProviderNameSearch'
 import ProviderResults, { type SearchStatus } from '../components/ProviderResults'
+import RecentlyViewed from '../components/RecentlyViewed'
 import SearchForm, { type SearchFormValues } from '../components/SearchForm'
 import { useAuth } from '../context/AuthContext'
 
@@ -214,6 +216,8 @@ function HomePage() {
             initialValues={formInitialValues}
           />
 
+          <ProviderNameSearch />
+
           <div className="disclaimer-panel">
             <InfoIcon width={18} height={18} />
             <p>
@@ -228,6 +232,8 @@ function HomePage() {
               not affect these results.
             </p>
           )}
+
+          {!hasSearch && <RecentlyViewed />}
         </section>
 
         <ProviderResults

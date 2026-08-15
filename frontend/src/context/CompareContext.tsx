@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 
 const MAX_COMPARE = 3
+// Session-only, not persistent across browser restarts, and never sent to the server --
+// this is purely a client-side convenience so a comparison survives an accidental reload.
+const STORAGE_KEY = 'docfitai.compareSelection'
 
 interface CompareContextValue {
   selectedIds: number[]
@@ -12,22 +15,47 @@ interface CompareContextValue {
 
 const CompareContext = createContext<CompareContextValue | null>(null)
 
-export function CompareProvider({ children }: { children: ReactNode }) {
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
+function readStoredSelection(): number[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((value): value is number => typeof value === 'number') : []
+  } catch {
+    return []
+  }
+}
 
-  const toggle = useCallback((id: number) => {
-    setSelectedIds((previous) => {
-      if (previous.includes(id)) {
-        return previous.filter((existingId) => existingId !== id)
-      }
-      if (previous.length >= MAX_COMPARE) {
-        return previous
-      }
-      return [...previous, id]
-    })
+export function CompareProvider({ children }: { children: ReactNode }) {
+  const [selectedIds, setSelectedIds] = useState<number[]>(readStoredSelection)
+
+  const persist = useCallback((ids: number[]) => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids))
+    } catch {
+      // sessionStorage can be unavailable (private browsing, quota); comparison still works in-memory.
+    }
   }, [])
 
-  const clear = useCallback(() => setSelectedIds([]), [])
+  const toggle = useCallback(
+    (id: number) => {
+      setSelectedIds((previous) => {
+        const next = previous.includes(id)
+          ? previous.filter((existingId) => existingId !== id)
+          : previous.length >= MAX_COMPARE
+            ? previous
+            : [...previous, id]
+        persist(next)
+        return next
+      })
+    },
+    [persist],
+  )
+
+  const clear = useCallback(() => {
+    setSelectedIds([])
+    persist([])
+  }, [persist])
 
   const value = useMemo<CompareContextValue>(
     () => ({
