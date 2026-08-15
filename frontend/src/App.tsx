@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { fetchInsuranceCarriers, fetchSpecialties, searchProviders } from './api/client'
+import { ApiError, fetchInsuranceCarriers, fetchSpecialties, searchProviders } from './api/client'
 import type { InsuranceCarrierDto, ProviderSearchResultDto, SpecialtyDto } from './api/types'
 import Header from './components/Header'
 import Hero from './components/Hero'
@@ -8,7 +8,7 @@ import { InfoIcon } from './components/icons'
 import SearchForm, { type SearchFormValues } from './components/SearchForm'
 import ProviderResults, { type SearchStatus } from './components/ProviderResults'
 
-const SEARCH_RADIUS_MILES = 25
+const UNREACHABLE_MESSAGE = 'Unable to reach the search service. Please try again.'
 
 function App() {
   const [specialties, setSpecialties] = useState<SpecialtyDto[]>([])
@@ -17,6 +17,7 @@ function App() {
 
   const [status, setStatus] = useState<SearchStatus>('idle')
   const [results, setResults] = useState<ProviderSearchResultDto[]>([])
+  const [originLabel, setOriginLabel] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
   const [lastSearch, setLastSearch] = useState<SearchFormValues | null>(null)
 
@@ -44,13 +45,24 @@ function App() {
     setStatus('loading')
     setErrorMessage(undefined)
     try {
-      const response = await searchProviders({ specialty: values.specialty, zip: values.zip })
+      // Insurance is demo/informational only -- intentionally never sent to the search API.
+      const response = await searchProviders({
+        specialty: values.specialty,
+        radius: values.radius,
+        sort: 'distance',
+        page: 0,
+        location: values.location,
+        lat: values.lat,
+        lng: values.lng,
+      })
       setResults(response.results)
+      setOriginLabel(response.originLabel)
       setStatus('success')
     } catch (error) {
       setResults([])
+      setOriginLabel(null)
       setStatus('error')
-      setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
+      setErrorMessage(error instanceof ApiError ? error.message : UNREACHABLE_MESSAGE)
     }
   }
 
@@ -109,8 +121,8 @@ function App() {
           results={results}
           errorMessage={errorMessage}
           specialtyName={selectedSpecialtyName}
-          zip={lastSearch?.zip}
-          radiusMiles={SEARCH_RADIUS_MILES}
+          originLabel={originLabel}
+          radiusMiles={lastSearch?.radius ?? 25}
           onRetry={handleRetry}
         />
       </main>

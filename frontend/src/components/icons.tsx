@@ -94,3 +94,54 @@ export function SearchIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function CrosshairIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22" />
+    </svg>
+  )
+}
+
+export function DirectionsIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3 11 20 4l-7 17-3-7-7-3Z" />
+    </svg>
+  )
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m5 5 14 14M19 5 5 19" />
+    </svg>
+  )
+}
+
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m14.5 5-7 7 7 7" />
+    </svg>
+  )
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m9.5 5 7 7-7 7" />
+    </svg>
+  )
+}
+
+export function ExternalLinkIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />
+      <path d="M14 4h6v6" />
+      <path d="M20 4 11 13" />
+    </svg>
+  )
+}

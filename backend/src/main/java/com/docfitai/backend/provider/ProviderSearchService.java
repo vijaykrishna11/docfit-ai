@@ -8,6 +8,7 @@ import com.docfitai.backend.reference.ZipGeography;
 import com.docfitai.backend.reference.ZipGeographyRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ProviderSearchService {
 
-    private static final double EARTH_RADIUS_MILES = 3958.8;
+    static final double EARTH_RADIUS_MILES = 3958.8;
+    private static final String SORT_NAME = "name";
 
     private static final String MATCH_QUERY =
             """
@@ -47,14 +49,17 @@ public class ProviderSearchService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public ProviderSearchResponseDto search(String specialtyCode, String zip, double radiusMiles, int page, int size) {
-        int safePage = Math.max(page, 0);
-        int safeSize = size <= 0 ? 20 : size;
+    public ProviderSearchResponseDto search(ProviderSearchQuery query) {
+        int safePage = Math.max(query.page(), 0);
+        int safeSize = query.size() <= 0 ? 20 : query.size();
+        double radiusMiles = query.radiusMiles() <= 0 ? 25 : query.radiusMiles();
 
         Specialty specialty = specialtyRepository
-                .findByCode(specialtyCode)
+                .findByCode(query.specialtyCode())
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Unknown specialty code: " + specialtyCode));
+                        HttpStatus.BAD_REQUEST, "Unknown specialty code: " + query.specialtyCode()));
+
+        Origin origin = resolveOrigin(query.zip(), query.location(), query.lat(), query.lng());
 
         List<String> taxonomyCodes = jdbcTemplate
                 .getJdbcTemplate()
@@ -63,14 +68,8 @@ public class ProviderSearchService {
                         String.class,
                         specialty.getId());
         if (taxonomyCodes.isEmpty()) {
-            return new ProviderSearchResponseDto(List.of(), safePage, safeSize, 0, 0);
+            return new ProviderSearchResponseDto(List.of(), safePage, safeSize, 0, 0, origin.label());
         }
-
-        ZipGeography origin = zipGeographyRepository
-                .findById(zip)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown ZIP code: " + zip));
-        double originLat = origin.getLatitude().doubleValue();
-        double originLon = origin.getLongitude().doubleValue();
 
         Map<Long, MatchRow> bestMatchByProvider = new LinkedHashMap<>();
         MapSqlParameterSource params = new MapSqlParameterSource("taxonomyCodes", taxonomyCodes);
@@ -104,7 +103,7 @@ public class ProviderSearchService {
         List<ProviderSearchResultDto> withinRadius = new ArrayList<>();
         for (MatchRow row : bestMatchByProvider.values()) {
             double distance = haversineMiles(
-                    originLat, originLon, row.latitude().doubleValue(), row.longitude().doubleValue());
+                    origin.latitude(), origin.longitude(), row.latitude().doubleValue(), row.longitude().doubleValue());
             if (distance <= radiusMiles) {
                 withinRadius.add(new ProviderSearchResultDto(
                         row.providerId(),
@@ -123,7 +122,12 @@ public class ProviderSearchService {
                         Math.round(distance * 10.0) / 10.0));
             }
         }
-        withinRadius.sort((a, b) -> Double.compare(a.distanceMiles(), b.distanceMiles()));
+
+        if (SORT_NAME.equalsIgnoreCase(query.sort())) {
+            withinRadius.sort(Comparator.comparing(ProviderSearchService::displayName, String.CASE_INSENSITIVE_ORDER));
+        } else {
+            withinRadius.sort(Comparator.comparingDouble(ProviderSearchResultDto::distanceMiles));
+        }
 
         int totalElements = withinRadius.size();
         int totalPages = (int) Math.ceil(totalElements / (double) safeSize);
@@ -131,7 +135,63 @@ public class ProviderSearchService {
         int toIndex = Math.min(fromIndex + safeSize, totalElements);
         List<ProviderSearchResultDto> pageResults = withinRadius.subList(fromIndex, toIndex);
 
-        return new ProviderSearchResponseDto(pageResults, safePage, safeSize, totalElements, totalPages);
+        return new ProviderSearchResponseDto(pageResults, safePage, safeSize, totalElements, totalPages, origin.label());
+    }
+
+    private static String displayName(ProviderSearchResultDto dto) {
+        if (dto.organizationName() != null && !dto.organizationName().isBlank()) {
+            return dto.organizationName();
+        }
+        String first = dto.firstName() == null ? "" : dto.firstName();
+        String last = dto.lastName() == null ? "" : dto.lastName();
+        return (first + " " + last).trim();
+    }
+
+    /**
+     * Resolves the search origin with precedence lat/lng &gt; zip &gt; free-text location.
+     * Free-text location is either a 5-digit ZIP or a city name (optionally "City, ST"),
+     * matched against the local {@code zip_geography} reference data -- no external geocoding.
+     */
+    Origin resolveOrigin(String zip, String location, Double lat, Double lng) {
+        if (lat != null && lng != null) {
+            return new Origin(lat, lng, null);
+        }
+        if (zip != null && !zip.isBlank()) {
+            return originFromZip(zip.trim());
+        }
+        if (location != null && !location.isBlank()) {
+            String trimmed = location.trim();
+            if (trimmed.matches("\\d{5}")) {
+                return originFromZip(trimmed);
+            }
+            return originFromCity(trimmed);
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A ZIP code or location is required");
+    }
+
+    private Origin originFromZip(String zip) {
+        ZipGeography zipGeography = zipGeographyRepository
+                .findById(zip)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown ZIP code: " + zip));
+        return new Origin(
+                zipGeography.getLatitude().doubleValue(),
+                zipGeography.getLongitude().doubleValue(),
+                zipGeography.getCity() + ", " + zipGeography.getStateCode());
+    }
+
+    private Origin originFromCity(String location) {
+        String cityPart = location.split(",")[0].trim();
+        List<ZipGeography> matches = zipGeographyRepository.findAll().stream()
+                .filter(zipGeography -> zipGeography.getCity().equalsIgnoreCase(cityPart))
+                .toList();
+        if (matches.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown location: " + location);
+        }
+        double avgLat =
+                matches.stream().mapToDouble(z -> z.getLatitude().doubleValue()).average().orElseThrow();
+        double avgLon =
+                matches.stream().mapToDouble(z -> z.getLongitude().doubleValue()).average().orElseThrow();
+        return new Origin(avgLat, avgLon, matches.get(0).getCity() + ", " + matches.get(0).getStateCode());
     }
 
     static double haversineMiles(double lat1, double lon1, double lat2, double lon2) {
@@ -141,6 +201,10 @@ public class ProviderSearchService {
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return EARTH_RADIUS_MILES * c;
+    }
+
+    /** Resolved search origin. {@code label} is null when the origin came from raw lat/lng (e.g. geolocation). */
+    record Origin(double latitude, double longitude, String label) {
     }
 
     private record MatchRow(

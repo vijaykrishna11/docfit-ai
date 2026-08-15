@@ -1,15 +1,18 @@
 package com.docfitai.backend.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static java.util.stream.Collectors.toMap;
 
 import com.docfitai.backend.provider.dto.ProviderSearchResponseDto;
 import com.docfitai.backend.provider.dto.ProviderSearchResultDto;
 import com.docfitai.backend.testsupport.PostgresIntegrationSupport;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 class ProviderSearchServiceTest extends PostgresIntegrationSupport {
 
@@ -38,7 +41,8 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertProvider(WRONG_SPECIALTY_NPI, "Wrong", "Specialty", "90802", "33.770000", "-118.191000");
         insertTaxonomy(WRONG_SPECIALTY_NPI, "207N00000X", true);
 
-        ProviderSearchResponseDto response = providerSearchService.search("CARDIOLOGY", "90802", 25, 0, 20);
+        ProviderSearchResponseDto response = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20));
 
         Map<String, ProviderSearchResultDto> byNpi =
                 response.results().stream().collect(toMap(ProviderSearchResultDto::npiNumber, r -> r));
@@ -47,11 +51,94 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         assertThat(byNpi).doesNotContainKeys(TOO_FAR_NPI, WRONG_SPECIALTY_NPI);
         assertThat(byNpi.get(NEAR_NPI).distanceMiles()).isLessThan(byNpi.get(FAR_IN_RADIUS_NPI).distanceMiles());
         assertThat(byNpi.get(NEAR_NPI).taxonomyCode()).isEqualTo("207RC0000X");
+        assertThat(response.originLabel()).isEqualTo("Long Beach, CA");
 
         for (int i = 0; i < response.results().size() - 1; i++) {
             assertThat(response.results().get(i).distanceMiles())
                     .isLessThanOrEqualTo(response.results().get(i + 1).distanceMiles());
         }
+    }
+
+    @Test
+    void radiusIsActuallyApplied() {
+        String near = "1000000005";
+        String farButWithinDefault = "1000000006";
+
+        insertProvider(near, "Near", "Doctor", "90802", "33.770000", "-118.191000");
+        insertTaxonomy(near, "207RC0000X", true);
+
+        insertProvider(farButWithinDefault, "FarButIn", "Radius", "90815", "33.794000", "-118.116000");
+        insertTaxonomy(farButWithinDefault, "207RC0000X", true);
+
+        ProviderSearchResponseDto narrow = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 2, "distance", 0, 20));
+
+        assertThat(narrow.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
+        assertThat(narrow.results())
+                .extracting(ProviderSearchResultDto::npiNumber)
+                .doesNotContain(farButWithinDefault);
+    }
+
+    @Test
+    void searchSupportsLatLngAndFreeTextCityOrigin() {
+        String near = "1000000007";
+        insertProvider(near, "Near", "Doctor", "90802", "33.770000", "-118.191000");
+        insertTaxonomy(near, "207RC0000X", true);
+
+        ProviderSearchResponseDto byLatLng = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", null, null, 33.770000, -118.191000, 25, "distance", 0, 20));
+        assertThat(byLatLng.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
+        assertThat(byLatLng.originLabel()).isNull();
+
+        ProviderSearchResponseDto byCity = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", null, "Long Beach", null, null, 25, "distance", 0, 20));
+        assertThat(byCity.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
+        assertThat(byCity.originLabel()).isEqualTo("Long Beach, CA");
+    }
+
+    @Test
+    void nameSortOrdersAlphabeticallyRegardlessOfDistance() {
+        String zedFar = "1000000008";
+        String amyNear = "1000000009";
+
+        insertProvider(zedFar, "Zed", "Provider", "90815", "33.794000", "-118.116000");
+        insertTaxonomy(zedFar, "207RC0000X", true);
+
+        insertProvider(amyNear, "Amy", "Provider", "90802", "33.770000", "-118.191000");
+        insertTaxonomy(amyNear, "207RC0000X", true);
+
+        ProviderSearchResponseDto response = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "name", 0, 200));
+
+        List<String> npis =
+                response.results().stream().map(ProviderSearchResultDto::npiNumber).toList();
+        assertThat(npis).contains(amyNear, zedFar);
+        assertThat(npis.indexOf(amyNear)).isLessThan(npis.indexOf(zedFar));
+    }
+
+    @Test
+    void fiftyMileRadiusIncludesProvidersOutsideDefaultRadius() {
+        String midRange = "1000000010";
+        // ~35 miles due north of 90802 -- outside the 25-mile default, inside 50.
+        insertProvider(midRange, "MidRange", "Doctor", "90802", "34.277000", "-118.191000");
+        insertTaxonomy(midRange, "207RC0000X", true);
+
+        ProviderSearchResponseDto at25 = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20));
+        assertThat(at25.results()).extracting(ProviderSearchResultDto::npiNumber).doesNotContain(midRange);
+
+        ProviderSearchResponseDto at50 = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 50, "distance", 0, 20));
+        assertThat(at50.results()).extracting(ProviderSearchResultDto::npiNumber).contains(midRange);
+    }
+
+    @Test
+    void unknownLocationIsRejectedWithBadRequest() {
+        assertThatThrownBy(() -> providerSearchService.search(
+                        new ProviderSearchQuery("CARDIOLOGY", null, "Nowhereville", null, null, 25, "distance", 0, 20)))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(400);
     }
 
     private void insertProvider(String npi, String firstName, String lastName, String zip, String lat, String lon) {

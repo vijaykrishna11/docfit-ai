@@ -31,4 +31,31 @@ export interface ProviderSearchResponseDto {
   size: number
   totalElements: number
   totalPages: number
+  originLabel: string | null
 }
+
+export interface ProviderTaxonomyDto {
+  taxonomyCode: string
+  classification: string
+  specialization: string | null
+  displayName: string
+  primaryTaxonomy: boolean
+}
+
+export interface ProviderDetailDto {
+  id: number
+  npiNumber: string
+  firstName: string | null
+  lastName: string | null
+  organizationName: string | null
+  phone: string | null
+  addressLine1: string
+  addressLine2: string | null
+  city: string
+  stateCode: string
+  postalCode: string
+  distanceMiles: number | null
+  taxonomies: ProviderTaxonomyDto[]
+}
+
+export type SortOption = 'distance' | 'name'
