@@ -23,6 +23,7 @@ public class ProviderSearchService {
 
     static final double EARTH_RADIUS_MILES = 3958.8;
     private static final String SORT_NAME = "name";
+    private static final String SORT_NAME_DESC = "name-desc";
 
     private static final String MATCH_QUERY =
             """
@@ -123,8 +124,12 @@ public class ProviderSearchService {
             }
         }
 
+        Comparator<ProviderSearchResultDto> nameComparator =
+                Comparator.comparing(ProviderSearchService::displayName, String.CASE_INSENSITIVE_ORDER);
         if (SORT_NAME.equalsIgnoreCase(query.sort())) {
-            withinRadius.sort(Comparator.comparing(ProviderSearchService::displayName, String.CASE_INSENSITIVE_ORDER));
+            withinRadius.sort(nameComparator);
+        } else if (SORT_NAME_DESC.equalsIgnoreCase(query.sort())) {
+            withinRadius.sort(nameComparator.reversed());
         } else {
             withinRadius.sort(Comparator.comparingDouble(ProviderSearchResultDto::distanceMiles));
         }

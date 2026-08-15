@@ -117,6 +117,26 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
     }
 
     @Test
+    void nameDescSortReversesAlphabeticalOrder() {
+        String zed = "1000000011";
+        String amy = "1000000012";
+
+        insertProvider(zed, "Zed", "Provider", "90802", "33.770000", "-118.191000");
+        insertTaxonomy(zed, "207RC0000X", true);
+
+        insertProvider(amy, "Amy", "Provider", "90802", "33.770000", "-118.191000");
+        insertTaxonomy(amy, "207RC0000X", true);
+
+        ProviderSearchResponseDto response = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "name-desc", 0, 200));
+
+        List<String> npis =
+                response.results().stream().map(ProviderSearchResultDto::npiNumber).toList();
+        assertThat(npis).contains(amy, zed);
+        assertThat(npis.indexOf(zed)).isLessThan(npis.indexOf(amy));
+    }
+
+    @Test
     void fiftyMileRadiusIncludesProvidersOutsideDefaultRadius() {
         String midRange = "1000000010";
         // ~35 miles due north of 90802 -- outside the 25-mile default, inside 50.
