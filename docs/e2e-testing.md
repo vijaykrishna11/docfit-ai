@@ -68,6 +68,27 @@ and `locator.isVisible({ timeout })` does not retry/wait the way `expect(...).to
 so the multi-location test's soft-skip check was evaluating before the debounced name search had
 returned any results, causing an unconditional skip.
 
+## Re-verified (release-candidate-hardening phase)
+
+Re-ran the full suite three consecutive times against a live backend (packaged jar, real Postgres
+with 492 pre-existing providers) and a freshly started frontend dev server, to check for flakiness
+(CLAUDE.md's "final E2E run... repeat if flaky, fix root cause" and stretch goal A):
+
+```
+Run 1: 7 passed (19.3s)
+Run 2: 7 passed (17.1s)
+Run 3: 7 passed (17.0s)
+```
+
+21/21 individual test executions passed, zero flakiness observed. The first attempt at this run
+did fail all 5 non-trivial tests -- root cause was environmental, not a product or test bug: two
+stale `vite` dev server processes left over from earlier in this session were still bound to ports
+5173/5174, pushing this run's frontend to port 5175, which isn't in the backend's dev
+`CORS_ALLOWED_ORIGINS` list -- so every reference-data fetch (specialties, payers) silently failed
+CORS and the specialty `<select>` never populated. Stopped the stale processes and re-ran on the
+correct default port; confirmed clean 3/3 immediately after. No application or test code changed
+as a result -- this was purely leftover local process state, not a regression.
+
 ## What's not automated (yet)
 
 - CI wiring: not added this phase. Playwright needs a running Postgres + backend + frontend triad,

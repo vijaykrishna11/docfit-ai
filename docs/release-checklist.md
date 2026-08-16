@@ -14,7 +14,7 @@ documents: `docs/threat-model.md`, `docs/privacy-data-flow.md`, `docs/api-securi
 | Frontend typecheck | Clean, no errors | `cd frontend && npm run typecheck` |
 | Frontend lint | 0 errors, 3 pre-existing warnings (react-refresh export-components in context files -- cosmetic, not a bug) | `cd frontend && npm run lint` |
 | Frontend production build | Succeeds; bundle ~316 kB JS (93.9 kB gzip), ~38.8 kB CSS (7.0 kB gzip) | `cd frontend && npm run build` |
-| E2E (Playwright) | See "E2E status" below | `cd frontend && npx playwright test` |
+| E2E (Playwright) | 7/7 passing, 3 consecutive clean runs (21/21 executions, zero flakiness) | `cd frontend && npx playwright test` |
 
 ## Security
 
@@ -101,15 +101,18 @@ honest findings about where the new bounding-box index does and does not help.
 
 ## E2E status
 
-Playwright suite exists (`frontend/e2e/`) from the prior phase covering core auth/search/save flows.
-Not re-run to green in this session's remaining scope -- listed in "Remaining/deferred work" below
-rather than claimed as verified.
+Playwright suite (`frontend/e2e/`, 7 tests covering auth/save persistence, core search, insurance
+non-blocking behavior, provider detail, comparison, and multi-location) re-run three consecutive
+times this phase against a live backend + real Postgres + frontend dev server: 7/7 passing every
+time, 21/21 total executions, zero flakiness. See `docs/e2e-testing.md` "Re-verified" for the full
+account, including an environmental (not product) issue the first attempt surfaced and its fix.
 
 ## Remaining / deferred work
 
 Honest accounting of what this phase's time did not reach, rather than claiming completion:
 
-- Full E2E re-run and stabilization pass (flaky-test audit, `waitForTimeout` removal).
+- Broader E2E coverage growth (current 7 tests are high-value but not exhaustive; no CI wiring yet
+  -- see `docs/e2e-testing.md` "What's not automated").
 - Accessibility keyboard-only walkthrough and automated scan.
 - Responsive breakpoint screenshot pass (375/390/768/1024/1440).
 - Backup/restore rehearsal.
