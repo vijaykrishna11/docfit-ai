@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, fetchProviderDetail } from '../api/client'
 import type { ProviderDetailDto, ProviderLocationDto } from '../api/types'
@@ -7,15 +7,18 @@ import Header from '../components/Header'
 import {
   AlertIcon,
   BadgeIcon,
+  BuildingIcon,
   CheckIcon,
   ChevronLeftIcon,
   DirectionsIcon,
+  FlagIcon,
   InfoIcon,
   LocationIcon,
   PhoneIcon,
   ShareIcon,
 } from '../components/icons'
 import NetworkEvidenceDrawer from '../components/NetworkEvidenceDrawer'
+import ReportIncorrectInfoModal from '../components/ReportIncorrectInfoModal'
 import SaveProviderButton from '../components/SaveProviderButton'
 import WhyThisResult from '../components/WhyThisResult'
 import {
@@ -132,10 +135,22 @@ function LocationPrecisionNote({ location }: { location: ProviderLocationDto }) 
 
 function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; planId?: number }) {
   const name = providerDisplayName(detail)
-  const location = detail.location
+  const isOrganization = detail.entityType === 'ORGANIZATION'
   const primaryTaxonomy = detail.taxonomies.find((taxonomy) => taxonomy.primaryTaxonomy) ?? detail.taxonomies[0]
   const [shareCopied, setShareCopied] = useState(false)
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
+  const [reportModalOpen, setReportModalOpen] = useState(false)
+
+  // All of a provider's locations, in one list -- the originally-selected/nearest one first.
+  // Switching which one is "active" is pure client state: every location's full data (address,
+  // phone, precision, distance) already arrived in the same response (CLAUDE.md "Location
+  // Switcher"), so no extra request is needed for the address/phone/directions/distance to update.
+  const allLocations = useMemo<ProviderLocationDto[]>(
+    () => (detail.location ? [detail.location, ...detail.otherLocations] : detail.otherLocations),
+    [detail.location, detail.otherLocations],
+  )
+  const [activeLocationId, setActiveLocationId] = useState<number | null>(detail.location?.id ?? null)
+  const activeLocation = allLocations.find((candidate) => candidate.id === activeLocationId) ?? detail.location ?? null
 
   async function handleShare() {
     try {
@@ -150,32 +165,33 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
   return (
     <article className="provider-detail-card">
       <div className="provider-detail-header">
-        <div className="avatar avatar-lg" aria-hidden="true">
-          {initialsFor(name)}
+        <div className={`avatar avatar-lg${isOrganization ? ' avatar-organization' : ''}`} aria-hidden="true">
+          {isOrganization ? <BuildingIcon width={28} height={28} /> : initialsFor(name)}
         </div>
         <div>
           <h1>{name}</h1>
           <div className="provider-detail-badges">
             {primaryTaxonomy && <span className="specialty-badge">{primaryTaxonomy.displayName}</span>}
-            {detail.distanceMiles != null && (
+            {activeLocation?.distanceMiles != null && (
               <span className="distance-badge">
                 <LocationIcon width={13} height={13} />
-                {formatDistance(detail.distanceMiles)} from your search
+                {formatDistance(activeLocation.distanceMiles)} from your search
               </span>
             )}
+            {allLocations.length > 1 && <span className="chip multi-location-chip">{allLocations.length} practice locations</span>}
           </div>
         </div>
       </div>
 
       <div className="provider-detail-actions">
-        {location?.phone && (
-          <a className="primary-button" href={telHref(location.phone)}>
+        {activeLocation?.phone && (
+          <a className="primary-button" href={telHref(activeLocation.phone)}>
             <PhoneIcon width={16} height={16} />
-            Call {location.phone}
+            Call {activeLocation.phone}
           </a>
         )}
-        {location && (
-          <a className="secondary-button" href={directionsUrl(location)} target="_blank" rel="noopener noreferrer">
+        {activeLocation && (
+          <a className="secondary-button" href={directionsUrl(activeLocation)} target="_blank" rel="noopener noreferrer">
             <DirectionsIcon width={16} height={16} />
             Get directions
           </a>
@@ -197,17 +213,17 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
       </div>
 
       <dl className="provider-detail-grid">
-        {location && (
+        {activeLocation && (
           <div>
             <dt>
               <LocationIcon width={13} height={13} />
-              {detail.otherLocations.length > 0 ? 'Nearest practice location' : 'Practice address'}
+              Practice address
             </dt>
             <dd>
-              {formattedAddress(location).line1}
+              {formattedAddress(activeLocation).line1}
               <br />
-              {formattedAddress(location).line2}
-              <LocationPrecisionNote location={location} />
+              {formattedAddress(activeLocation).line2}
+              <LocationPrecisionNote location={activeLocation} />
             </dd>
           </div>
         )}
@@ -218,48 +234,65 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
           </dt>
           <dd>{detail.npiNumber}</dd>
         </div>
-        {location?.phone && (
+        {activeLocation?.phone && (
           <div>
             <dt>
               <PhoneIcon width={13} height={13} />
               Phone
             </dt>
-            <dd>{location.phone}</dd>
+            <dd>{activeLocation.phone}</dd>
           </div>
         )}
       </dl>
 
-      {detail.otherLocations.length > 0 && (
+      {allLocations.length > 1 && (
         <section className="provider-other-locations">
-          <h2>Other locations</h2>
-          <ul className="provider-other-locations-list">
-            {detail.otherLocations.map((otherLocation) => {
-              const { line1, line2 } = formattedAddress(otherLocation)
+          <h2>Practice locations</h2>
+          <ul className="location-switcher-list">
+            {allLocations.map((candidateLocation) => {
+              const { line1, line2 } = formattedAddress(candidateLocation)
+              const isActive = candidateLocation.id === activeLocationId
               return (
-                <li key={otherLocation.id} className="provider-other-location-item">
-                  <p className="detail">
-                    <LocationIcon width={15} height={15} />
-                    <span>
-                      {line1}
-                      <br />
-                      {line2}
-                    </span>
-                  </p>
-                  {otherLocation.phone && (
+                <li key={candidateLocation.id} className={`location-switcher-item${isActive ? ' is-active' : ''}`}>
+                  <div className="location-switcher-item-header">
+                    <p className="detail">
+                      <LocationIcon width={15} height={15} />
+                      <span>
+                        {line1}
+                        <br />
+                        {line2}
+                      </span>
+                    </p>
+                    {isActive ? (
+                      <span className="chip">
+                        <CheckIcon width={11} height={11} /> Currently showing
+                      </span>
+                    ) : (
+                      <button type="button" className="ghost-button" onClick={() => setActiveLocationId(candidateLocation.id)}>
+                        Use this location
+                      </button>
+                    )}
+                  </div>
+                  {candidateLocation.phone && (
                     <p className="detail">
                       <PhoneIcon width={15} height={15} />
-                      <span>{otherLocation.phone}</span>
+                      <span>{candidateLocation.phone}</span>
                     </p>
                   )}
-                  <LocationPrecisionNote location={otherLocation} />
+                  <LocationPrecisionNote location={candidateLocation} />
                   <div className="provider-card-buttons">
-                    {otherLocation.phone && (
-                      <a className="ghost-button" href={telHref(otherLocation.phone)}>
+                    {candidateLocation.phone && (
+                      <a className="ghost-button" href={telHref(candidateLocation.phone)}>
                         <PhoneIcon width={14} height={14} />
                         Call
                       </a>
                     )}
-                    <a className="ghost-button" href={directionsUrl(otherLocation)} target="_blank" rel="noopener noreferrer">
+                    <a
+                      className="ghost-button"
+                      href={directionsUrl(candidateLocation)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       <DirectionsIcon width={14} height={14} />
                       Directions
                     </a>
@@ -288,17 +321,10 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
         <WhyThisResult
           specialtyDisplayName={primaryTaxonomy.displayName}
           npiNumber={detail.npiNumber}
-          distanceMiles={detail.distanceMiles}
+          distanceMiles={activeLocation?.distanceMiles}
+          hasPhone={activeLocation ? Boolean(activeLocation.phone) : undefined}
         />
       )}
-
-      <div className="disclaimer-panel">
-        <InfoIcon width={18} height={18} />
-        <p>
-          Provider information is sourced from public NPPES/NPI records and may change. Confirm
-          details directly with the provider.
-        </p>
-      </div>
 
       {planId != null ? (
         <div className="provider-network-evidence-section">
@@ -309,7 +335,7 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
             <NetworkEvidenceDrawer
               providerId={detail.id}
               planId={planId}
-              locationId={location?.id}
+              locationId={activeLocation?.id}
               onClose={() => setEvidenceDrawerOpen(false)}
             />
           )}
@@ -321,17 +347,53 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
         </div>
       )}
 
-      {detail.importedAt && (
-        <p className="provenance-note">
-          Imported into DocFit AI on{' '}
-          {new Date(detail.importedAt).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}{' '}
-          from public NPPES/NPI records.
-        </p>
-      )}
+      <section className="about-this-data">
+        <h2>About this data</h2>
+        <dl className="about-data-grid">
+          <div className="about-data-row">
+            <dt>Data source</dt>
+            <dd>Public NPPES/NPI provider records</dd>
+          </div>
+          {detail.importedAt && (
+            <div className="about-data-row">
+              <dt>Imported into DocFit AI</dt>
+              <dd>
+                {new Date(detail.importedAt).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </dd>
+            </div>
+          )}
+          <div className="about-data-row">
+            <dt>Location accuracy</dt>
+            <dd>
+              {activeLocation && (activeLocation.coordinatePrecision === 'ZIP_CENTROID' || activeLocation.coordinatePrecision === 'CITY_CENTROID')
+                ? 'ZIP/city-level approximation, not a precise address geocode'
+                : 'Address-level geocode'}
+            </dd>
+          </div>
+        </dl>
+        <div className="disclaimer-panel">
+          <InfoIcon width={18} height={18} />
+          <p>
+            Provider information is sourced from public NPPES/NPI records and may change. Confirm
+            details directly with the provider.
+          </p>
+        </div>
+        <button type="button" className="link-button report-incorrect-info-trigger" onClick={() => setReportModalOpen(true)}>
+          <FlagIcon width={14} height={14} />
+          Report incorrect information
+        </button>
+        {reportModalOpen && (
+          <ReportIncorrectInfoModal
+            providerId={detail.id}
+            locationId={activeLocation?.id}
+            onClose={() => setReportModalOpen(false)}
+          />
+        )}
+      </section>
     </article>
   )
 }

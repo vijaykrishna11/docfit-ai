@@ -24,6 +24,7 @@ const sampleDetail: ProviderDetailDto = {
     latitude: 33.77,
     longitude: -118.19,
     coordinatePrecision: 'ZIP_CENTROID',
+    distanceMiles: 2.5,
   },
   otherLocations: [],
   distanceMiles: 2.5,
@@ -83,6 +84,7 @@ describe('ProviderDetailPage', () => {
           latitude: 33.85,
           longitude: -118.13,
           coordinatePrecision: 'ZIP_CENTROID',
+          distanceMiles: 8.1,
         },
       ],
     }
@@ -95,10 +97,12 @@ describe('ProviderDetailPage', () => {
       { route: '/providers/42' },
     )
 
-    await waitFor(() => expect(screen.getByText('Other locations')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Practice locations')).toBeInTheDocument())
     expect(screen.getByText(/456 Second Office/)).toBeInTheDocument()
-    // Two "Call" links: one for the primary location, one for the other office.
-    expect(screen.getAllByRole('link', { name: /call/i })).toHaveLength(2)
+    // The location switcher lists every office (including the active one) with its own working
+    // Call/Directions actions, plus the primary "Call <number>" action at the top of the page --
+    // three Call links total for a two-location provider where both offices have a phone number.
+    expect(screen.getAllByRole('link', { name: /call/i })).toHaveLength(3)
     expect(screen.getAllByRole('link', { name: /directions/i }).length).toBeGreaterThanOrEqual(2)
 
     vi.restoreAllMocks()

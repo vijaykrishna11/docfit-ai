@@ -24,17 +24,30 @@ test('a provider with multiple real practice locations shows one selected office
   await firstResult.click()
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 
+  // getByRole, not getByText: the "N practice locations" chip badge is also on the page and
+  // would otherwise ambiguously substring-match the "Practice locations" heading text too.
   const hasOtherLocations = await page
-    .getByText('Other locations')
+    .getByRole('heading', { name: 'Practice locations' })
     .waitFor({ state: 'visible', timeout: 5000 })
     .then(() => true)
     .catch(() => false)
   test.skip(!hasOtherLocations, 'This provider currently has only one location in the local dataset.')
 
-  await expect(page.locator('.provider-other-location-item').first()).toBeVisible()
-  // Each other location has its own Directions link, not the primary office's address.
-  await expect(page.locator('.provider-other-location-item').first().getByRole('link', { name: /directions/i })).toHaveAttribute(
-    'href',
-    /google\.com\/maps/,
-  )
+  const locationItems = page.locator('.location-switcher-item')
+  await expect(locationItems.first()).toBeVisible()
+  // Each office has its own Directions link, not the primary office's address.
+  await expect(locationItems.first().getByRole('link', { name: /directions/i })).toHaveAttribute('href', /google\.com\/maps/)
+
+  // Switching to a non-active office updates the page's main address/phone/directions -- not
+  // just the switcher list -- to that office's own data (CLAUDE.md "Location Switcher"). Captured
+  // by address text, not by a ":not(.is-active)" selector -- that selector's meaning changes the
+  // moment the click makes this same element active, so re-querying it afterward would silently
+  // resolve to a different (still-inactive) item instead of the one just clicked.
+  const inactiveItem = page.locator('.location-switcher-item:not(.is-active)').first()
+  const inactiveAddressText = (await inactiveItem.locator('.detail span').first().innerText()).split('\n')[0].trim()
+  await inactiveItem.getByRole('button', { name: /use this location/i }).click()
+
+  await expect(page.locator('.provider-detail-grid dd').first()).toContainText(inactiveAddressText)
+  const nowActiveItem = page.locator('.location-switcher-item.is-active').filter({ hasText: inactiveAddressText })
+  await expect(nowActiveItem).toHaveCount(1)
 })
