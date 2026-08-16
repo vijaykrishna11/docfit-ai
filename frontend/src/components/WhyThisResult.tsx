@@ -1,4 +1,6 @@
+import type { NetworkEvidenceSummaryDto } from '../api/types'
 import { formatDistance } from '../utils/providerDisplay'
+import { evidenceStatusCopy } from '../utils/networkEvidenceDisplay'
 import { BadgeIcon, CheckIcon, ChevronRightIcon, InfoIcon } from './icons'
 
 interface WhyThisResultProps {
@@ -6,6 +8,7 @@ interface WhyThisResultProps {
   npiNumber: string
   distanceMiles?: number | null
   originLabel?: string | null
+  networkEvidence?: NetworkEvidenceSummaryDto | null
 }
 
 /**
@@ -13,7 +16,7 @@ interface WhyThisResultProps {
  * something DocFit AI actually knows and can verify from its own data -- never a score, rank,
  * or "best match" claim.
  */
-function WhyThisResult({ specialtyDisplayName, npiNumber, distanceMiles, originLabel }: WhyThisResultProps) {
+function WhyThisResult({ specialtyDisplayName, npiNumber, distanceMiles, originLabel, networkEvidence }: WhyThisResultProps) {
   return (
     <details className="why-this-result">
       <summary>
@@ -42,12 +45,26 @@ function WhyThisResult({ specialtyDisplayName, npiNumber, distanceMiles, originL
             <strong>Source:</strong> Provider identity found in public NPPES/NPI data (NPI {npiNumber})
           </span>
         </li>
-        <li className="why-this-result-info">
-          <InfoIcon width={14} height={14} />
-          <span>
-            <strong>Insurance:</strong> Coverage is not verified
-          </span>
-        </li>
+        {networkEvidence ? (
+          <li className={networkEvidence.status === 'EVIDENCE_FOUND' ? '' : 'why-this-result-info'}>
+            {networkEvidence.status === 'EVIDENCE_FOUND' ? (
+              <CheckIcon width={14} height={14} />
+            ) : (
+              <InfoIcon width={14} height={14} />
+            )}
+            <span>
+              <strong>Insurance:</strong> {evidenceStatusCopy(networkEvidence.status)}
+              {networkEvidence.synthetic ? ' (synthetic demo data)' : ''} -- coverage is not guaranteed
+            </span>
+          </li>
+        ) : (
+          <li className="why-this-result-info">
+            <InfoIcon width={14} height={14} />
+            <span>
+              <strong>Insurance:</strong> Coverage is not verified
+            </span>
+          </li>
+        )}
       </ul>
       <p className="why-this-result-footnote">
         <BadgeIcon width={12} height={12} />

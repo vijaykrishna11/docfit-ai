@@ -2447,6 +2447,173 @@ button.area-zip-chip {
   gap: 12px;
 }
 
+/* ---------- Network evidence ---------- */
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: var(--primary-hover);
+  }
+}
+
+.network-evidence-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.network-evidence-badge-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.network-evidence-badge-hint {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.evidence-freshness {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.evidence-status-evidence_found {
+  color: var(--primary);
+}
+
+.network-evidence-badge.evidence-status-evidence_found {
+  border-color: var(--primary-border);
+  background: var(--primary-bg);
+}
+
+.evidence-status-match_ambiguous,
+.evidence-status-source_unavailable,
+.evidence-status-not_checked {
+  color: var(--secondary);
+}
+
+.network-evidence-badge.evidence-status-match_ambiguous {
+  border-color: var(--secondary-border);
+  background: var(--secondary-bg);
+}
+
+.evidence-status-no_evidence_found {
+  color: var(--text-muted);
+}
+
+.chip-demo {
+  background: var(--secondary-bg);
+  color: var(--secondary);
+  border: 1px solid var(--secondary-border);
+}
+
+.provider-network-evidence-section {
+  display: flex;
+}
+
+/* Accessible modal/drawer (CLAUDE.md 33, 72-73): stacks on mobile, no giant tables. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 36, 62, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modal-panel {
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-close {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--border);
+  }
+}
+
+.network-evidence-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+}
+
+.network-evidence-grid dt {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.network-evidence-grid dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.network-evidence-drawer .disclaimer-panel ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .delete-confirm-actions {
   display: flex;
   gap: 10px;

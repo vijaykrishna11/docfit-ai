@@ -1,7 +1,10 @@
 import type {
   AuthResponseDto,
   InsuranceCarrierDto,
+  InsurancePlanDto,
   LocationSuggestionDto,
+  NetworkEvidenceDetailDto,
+  PayerDto,
   ProviderDetailDto,
   ProviderNameSearchResultDto,
   ProviderSearchResponseDto,
@@ -118,8 +121,21 @@ export function fetchSpecialties(): Promise<SpecialtyDto[]> {
   return request<SpecialtyDto[]>('/api/specialties')
 }
 
+/** @deprecated Legacy, purely informational carrier list. Superseded by fetchPayers()/fetchPayerPlans(). */
 export function fetchInsuranceCarriers(): Promise<InsuranceCarrierDto[]> {
   return request<InsuranceCarrierDto[]>('/api/insurance-carriers')
+}
+
+export function fetchPayers(): Promise<PayerDto[]> {
+  return request<PayerDto[]>('/api/insurance/payers')
+}
+
+export function fetchPayerPlans(payerId: number): Promise<InsurancePlanDto[]> {
+  return request<InsurancePlanDto[]>(`/api/insurance/payers/${payerId}/plans`)
+}
+
+export function fetchProviderNetworkEvidence(providerId: number, planId: number): Promise<NetworkEvidenceDetailDto> {
+  return request<NetworkEvidenceDetailDto>(`/api/providers/${providerId}/network-evidence?planId=${planId}`)
 }
 
 export interface ProviderSearchParams {
@@ -130,6 +146,7 @@ export interface ProviderSearchParams {
   radius: number
   sort: SortOption
   page: number
+  planId?: number
 }
 
 const RESULTS_PAGE_SIZE = 20
@@ -147,6 +164,9 @@ export function searchProviders(searchParams: ProviderSearchParams): Promise<Pro
     params.set('lng', String(searchParams.lng))
   } else if (searchParams.location) {
     params.set('location', searchParams.location)
+  }
+  if (searchParams.planId != null) {
+    params.set('planId', String(searchParams.planId))
   }
   return request<ProviderSearchResponseDto>(`/api/providers/search?${params.toString()}`)
 }

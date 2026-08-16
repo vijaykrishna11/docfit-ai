@@ -11,6 +11,7 @@ interface ProviderResultsProps {
   errorMessage?: string
   specialtyName?: string
   originLabel?: string | null
+  planId?: number
   radiusMiles?: number
   totalElements?: number
   page?: number
@@ -33,6 +34,7 @@ function ProviderResults({
   errorMessage,
   specialtyName,
   originLabel,
+  planId,
   radiusMiles = 25,
   totalElements,
   page = 0,
@@ -186,7 +188,7 @@ function ProviderResults({
         <>
           <ul className="provider-list">
             {results.map((provider, index) => (
-              <ProviderCard key={provider.id} provider={provider} entranceIndex={index} originLabel={originLabel} />
+              <ProviderCard key={provider.id} provider={provider} entranceIndex={index} originLabel={originLabel} planId={planId} />
             ))}
           </ul>
 

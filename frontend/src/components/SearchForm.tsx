@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { fetchLocationSuggestions } from '../api/client'
-import type { InsuranceCarrierDto, LocationSuggestionDto, SpecialtyDto } from '../api/types'
+import type { LocationSuggestionDto, PayerDto, SpecialtyDto } from '../api/types'
 import { useGeolocation } from '../hooks/useGeolocation'
-import { CheckIcon, CloseIcon, CrosshairIcon, InsuranceIcon, LocationIcon, SearchIcon, SpecialtyIcon } from './icons'
+import InsurancePlanSelector, { type InsurancePlanSelectorValue } from './InsurancePlanSelector'
+import { CheckIcon, CloseIcon, CrosshairIcon, LocationIcon, SearchIcon, SpecialtyIcon } from './icons'
 
 export interface SearchFormValues {
   specialty: string
-  insuranceCarrierId: string
+  payerId: string
+  planId: string
   radius: number
   location?: string
   lat?: number
@@ -15,7 +17,8 @@ export interface SearchFormValues {
 
 export interface SearchFormInitialValues {
   specialty?: string
-  insuranceCarrierId?: string
+  payerId?: string
+  planId?: string
   location?: string
   radius?: number
 }
@@ -24,15 +27,18 @@ const RADIUS_OPTIONS = [5, 10, 25, 50] as const
 
 interface SearchFormProps {
   specialties: SpecialtyDto[]
-  insuranceCarriers: InsuranceCarrierDto[]
+  payers: PayerDto[]
   onSearch: (values: SearchFormValues) => void
   disabled?: boolean
   initialValues?: SearchFormInitialValues
 }
 
-function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false, initialValues }: SearchFormProps) {
+function SearchForm({ specialties, payers, onSearch, disabled = false, initialValues }: SearchFormProps) {
   const [specialty, setSpecialty] = useState(initialValues?.specialty ?? '')
-  const [insuranceCarrierId, setInsuranceCarrierId] = useState(initialValues?.insuranceCarrierId ?? '')
+  const [insurance, setInsurance] = useState<InsurancePlanSelectorValue>({
+    payerId: initialValues?.payerId ?? '',
+    planId: initialValues?.planId ?? '',
+  })
   const [locationText, setLocationText] = useState(initialValues?.location ?? '')
   const [radius, setRadius] = useState(initialValues?.radius ?? 25)
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestionDto[]>([])
@@ -85,10 +91,11 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const insuranceValues = { payerId: insurance.payerId, planId: insurance.planId }
     if (usingCurrentLocation && geolocation.coords) {
-      onSearch({ specialty, insuranceCarrierId, radius, lat: geolocation.coords.lat, lng: geolocation.coords.lng })
+      onSearch({ specialty, ...insuranceValues, radius, lat: geolocation.coords.lat, lng: geolocation.coords.lng })
     } else {
-      onSearch({ specialty, insuranceCarrierId, radius, location: resolveLocationValue() })
+      onSearch({ specialty, ...insuranceValues, radius, location: resolveLocationValue() })
     }
   }
 
@@ -116,24 +123,7 @@ function SearchForm({ specialties, insuranceCarriers, onSearch, disabled = false
         </div>
       </div>
 
-      <div className="field">
-        <label htmlFor="insurance">Insurance</label>
-        <div className="input-with-icon">
-          <InsuranceIcon width={18} height={18} />
-          <select
-            id="insurance"
-            value={insuranceCarrierId}
-            onChange={(event) => setInsuranceCarrierId(event.target.value)}
-          >
-            <option value="">Any / not sure</option>
-            {insuranceCarriers.map((carrier) => (
-              <option key={carrier.id} value={carrier.id}>
-                {carrier.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <InsurancePlanSelector payers={payers} value={insurance} onChange={setInsurance} />
 
       <div className="field field-location">
         <label htmlFor="location">Location</label>

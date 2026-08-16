@@ -18,8 +18,8 @@ const FACTS = [
   },
   {
     icon: InfoIcon,
-    title: 'Insurance not verified',
-    text: 'Insurance selection is demo/informational only and is not checked against real coverage.',
+    title: 'Network evidence, not a guarantee',
+    text: 'When a plan with directory evidence is selected, DocFit AI shows sourced, dated network directory evidence -- never a guarantee of coverage or payment. Most insurers have no integrated directory yet.',
   },
 ]
 

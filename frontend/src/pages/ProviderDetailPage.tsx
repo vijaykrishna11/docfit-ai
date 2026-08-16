@@ -15,6 +15,7 @@ import {
   PhoneIcon,
   ShareIcon,
 } from '../components/icons'
+import NetworkEvidenceDrawer from '../components/NetworkEvidenceDrawer'
 import SaveProviderButton from '../components/SaveProviderButton'
 import WhyThisResult from '../components/WhyThisResult'
 import {
@@ -109,18 +110,21 @@ function ProviderDetailPage() {
           </div>
         )}
 
-        {status === 'success' && detail && <ProviderDetailCard detail={detail} />}
+        {status === 'success' && detail && (
+          <ProviderDetailCard detail={detail} planId={searchParams.get('planId') ? Number(searchParams.get('planId')) : undefined} />
+        )}
       </main>
       <Footer />
     </div>
   )
 }
 
-function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
+function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; planId?: number }) {
   const name = providerDisplayName(detail)
   const { line1, line2 } = formattedAddress(detail)
   const primaryTaxonomy = detail.taxonomies.find((taxonomy) => taxonomy.primaryTaxonomy) ?? detail.taxonomies[0]
   const [shareCopied, setShareCopied] = useState(false)
+  const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
 
   async function handleShare() {
     try {
@@ -238,10 +242,21 @@ function ProviderDetailCard({ detail }: { detail: ProviderDetailDto }) {
         </p>
       </div>
 
-      <div className="disclaimer-panel">
-        <InfoIcon width={18} height={18} />
-        <p>Insurance coverage is not verified in this demo. Confirm directly with the provider or insurer.</p>
-      </div>
+      {planId != null ? (
+        <div className="provider-network-evidence-section">
+          <button type="button" className="secondary-button" onClick={() => setEvidenceDrawerOpen(true)}>
+            View network evidence
+          </button>
+          {evidenceDrawerOpen && (
+            <NetworkEvidenceDrawer providerId={detail.id} planId={planId} onClose={() => setEvidenceDrawerOpen(false)} />
+          )}
+        </div>
+      ) : (
+        <div className="disclaimer-panel">
+          <InfoIcon width={18} height={18} />
+          <p>Insurance coverage is not verified in this demo. Confirm directly with the provider or insurer.</p>
+        </div>
+      )}
 
       {detail.importedAt && (
         <p className="provenance-note">

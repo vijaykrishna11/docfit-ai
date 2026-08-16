@@ -11,6 +11,7 @@ import {
   telHref,
 } from '../utils/providerDisplay'
 import { BadgeIcon, CheckIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
+import NetworkEvidenceBadge from './NetworkEvidenceBadge'
 import SaveProviderButton from './SaveProviderButton'
 import WhyThisResult from './WhyThisResult'
 
@@ -21,9 +22,10 @@ interface ProviderCardProps {
   provider: ProviderSearchResultDto
   entranceIndex?: number
   originLabel?: string | null
+  planId?: number
 }
 
-function ProviderCard({ provider, entranceIndex = 0, originLabel }: ProviderCardProps) {
+function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: ProviderCardProps) {
   const { isSelected, toggle, isFull } = useCompare()
   const name = providerDisplayName(provider)
   const { line1, line2 } = formattedAddress(provider)
@@ -71,11 +73,15 @@ function ProviderCard({ provider, entranceIndex = 0, originLabel }: ProviderCard
           <BadgeIcon width={14} height={14} />
           <span>NPI {provider.npiNumber}</span>
         </p>
+        {planId != null && provider.networkEvidence && (
+          <NetworkEvidenceBadge providerId={provider.id} planId={planId} evidence={provider.networkEvidence} />
+        )}
         <WhyThisResult
           specialtyDisplayName={provider.specialtyDisplayName}
           npiNumber={provider.npiNumber}
           distanceMiles={provider.distanceMiles}
           originLabel={originLabel}
+          networkEvidence={provider.networkEvidence}
         />
       </div>
 

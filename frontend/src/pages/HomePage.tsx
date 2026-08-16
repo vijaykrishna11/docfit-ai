@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ApiError, fetchInsuranceCarriers, fetchSpecialties, saveSearch, searchProviders } from '../api/client'
-import type { InsuranceCarrierDto, ProviderSearchResultDto, SortOption, SpecialtyDto } from '../api/types'
+import { ApiError, fetchPayers, fetchSpecialties, saveSearch, searchProviders } from '../api/client'
+import type { PayerDto, ProviderSearchResultDto, SortOption, SpecialtyDto } from '../api/types'
 import About from '../components/About'
 import CompareBar from '../components/CompareBar'
 import DataSources from '../components/DataSources'
@@ -29,7 +29,7 @@ function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [specialties, setSpecialties] = useState<SpecialtyDto[]>([])
-  const [insuranceCarriers, setInsuranceCarriers] = useState<InsuranceCarrierDto[]>([])
+  const [payers, setPayers] = useState<PayerDto[]>([])
   const [referenceDataError, setReferenceDataError] = useState<string | null>(null)
   const [referenceDataLoading, setReferenceDataLoading] = useState(true)
 
@@ -47,11 +47,11 @@ function HomePage() {
     let cancelled = false
     setReferenceDataLoading(true)
     setReferenceDataError(null)
-    Promise.all([fetchSpecialties(), fetchInsuranceCarriers()])
-      .then(([specialtyList, carrierList]) => {
+    Promise.all([fetchSpecialties(), fetchPayers()])
+      .then(([specialtyList, payerList]) => {
         if (cancelled) return
         setSpecialties(specialtyList)
-        setInsuranceCarriers(carrierList)
+        setPayers(payerList)
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -90,7 +90,8 @@ function HomePage() {
   const radius = Number(searchParams.get('radius') ?? DEFAULT_RADIUS)
   const sort = (searchParams.get('sort') as SortOption | null) ?? DEFAULT_SORT
   const page = Number(searchParams.get('page') ?? 0)
-  const insuranceCarrierId = searchParams.get('insurance') ?? ''
+  const payerId = searchParams.get('payerId') ?? ''
+  const planId = searchParams.get('planId') ?? ''
 
   const hasSearch = Boolean(specialty) && Boolean(location || (lat && lng))
 
@@ -106,6 +107,7 @@ function HomePage() {
         location: lat && lng ? undefined : location || undefined,
         lat: lat ? Number(lat) : undefined,
         lng: lng ? Number(lng) : undefined,
+        planId: planId ? Number(planId) : undefined,
       })
       setResults(response.results)
       setOriginLabel(response.originLabel)
@@ -133,7 +135,7 @@ function HomePage() {
     setSearchSaved(false)
     // Search re-runs only when the URL-derived search criteria actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [specialty, location, lat, lng, radius, sort, page])
+  }, [specialty, location, lat, lng, radius, sort, page, planId])
 
   async function handleSaveSearch() {
     setIsSavingSearch(true)
@@ -183,8 +185,11 @@ function HomePage() {
     next.set('radius', String(values.radius))
     next.set('sort', DEFAULT_SORT)
     next.set('page', '0')
-    if (values.insuranceCarrierId) {
-      next.set('insurance', values.insuranceCarrierId)
+    if (values.payerId) {
+      next.set('payerId', values.payerId)
+    }
+    if (values.planId) {
+      next.set('planId', values.planId)
     }
     if (values.lat != null && values.lng != null) {
       next.set('lat', String(values.lat))
@@ -229,17 +234,18 @@ function HomePage() {
     }
   }
 
-  const selectedCarrierName = insuranceCarriers.find((carrier) => String(carrier.id) === insuranceCarrierId)?.name
+  const selectedPayer = payers.find((payer) => String(payer.id) === payerId)
   const selectedSpecialtyName = specialties.find((s) => s.code === specialty)?.name
 
   const formInitialValues = useMemo(
     () => ({
       specialty,
-      insuranceCarrierId,
+      payerId,
+      planId,
       location: lat && lng ? '' : location,
       radius: radius || DEFAULT_RADIUS,
     }),
-    [specialty, insuranceCarrierId, location, lat, lng, radius],
+    [specialty, payerId, planId, location, lat, lng, radius],
   )
 
   return (
@@ -265,9 +271,9 @@ function HomePage() {
 
         <section className="search-section" id="search-panel">
           <SearchForm
-            key={`${specialty}|${insuranceCarrierId}|${location}|${lat}|${lng}|${radius}`}
+            key={`${specialty}|${payerId}|${planId}|${location}|${lat}|${lng}|${radius}`}
             specialties={specialties}
-            insuranceCarriers={insuranceCarriers}
+            payers={payers}
             onSearch={handleSearch}
             disabled={status === 'loading'}
             initialValues={formInitialValues}
@@ -278,15 +284,16 @@ function HomePage() {
           <div className="disclaimer-panel">
             <InfoIcon width={18} height={18} />
             <p>
-              Insurance selection is for demonstration only. Coverage is not verified. Confirm
-              directly with the provider or insurer.
+              {selectedPayer?.hasIntegratedPlans
+                ? 'Network directory information can change and does not guarantee coverage or payment. Confirm eligibility and benefits directly with your insurer.'
+                : 'Insurance coverage is not verified for most insurers in this demo. Confirm directly with the provider or insurer.'}
             </p>
           </div>
 
-          {status === 'success' && selectedCarrierName && (
+          {status === 'success' && selectedPayer && !selectedPayer.hasIntegratedPlans && (
             <p className="insurance-note">
-              Insurance filter (&ldquo;{selectedCarrierName}&rdquo;) is informational only and does
-              not affect these results.
+              Network verification is not currently available for {selectedPayer.name}. These
+              results are not filtered by insurance.
             </p>
           )}
 
@@ -299,6 +306,7 @@ function HomePage() {
           errorMessage={errorMessage}
           specialtyName={selectedSpecialtyName}
           originLabel={originLabel}
+          planId={planId ? Number(planId) : undefined}
           radiusMiles={radius || DEFAULT_RADIUS}
           totalElements={totalElements}
           page={page}
