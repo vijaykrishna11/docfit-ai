@@ -15,10 +15,12 @@ import PrivacyAccountMessage from '../components/PrivacyAccountMessage'
 import ProviderNameSearch from '../components/ProviderNameSearch'
 import ProviderResults, { type SearchStatus } from '../components/ProviderResults'
 import RecentlyViewed from '../components/RecentlyViewed'
+import RecentSearches from '../components/RecentSearches'
 import SearchForm, { type SearchFormValues } from '../components/SearchForm'
 import SupportedAreas from '../components/SupportedAreas'
 import WhyDocFit from '../components/WhyDocFit'
 import { useAuth } from '../context/AuthContext'
+import { recordRecentSearch } from '../utils/recentSearches'
 
 const UNREACHABLE_MESSAGE = 'Unable to reach the search service. Please try again.'
 const DEFAULT_RADIUS = 25
@@ -134,6 +136,11 @@ function HomePage() {
         setTotalElements(response.totalElements)
         setTotalPages(response.totalPages)
         setStatus('success')
+        const specialtyName = specialties.find((s) => s.code === specialty)?.name
+        const locationLabel = response.originLabel ?? (lat && lng ? undefined : location || undefined)
+        if (specialtyName && locationLabel) {
+          recordRecentSearch({ specialtyCode: specialty, specialtyName, locationLabel, radius: radius || DEFAULT_RADIUS })
+        }
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -340,7 +347,12 @@ function HomePage() {
             </p>
           )}
 
-          {!hasSearch && <RecentlyViewed />}
+          {!hasSearch && (
+            <>
+              <RecentSearches />
+              <RecentlyViewed />
+            </>
+          )}
         </section>
 
         <ProviderResults
