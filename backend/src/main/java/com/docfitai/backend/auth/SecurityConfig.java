@@ -59,6 +59,13 @@ public class SecurityConfig {
                                 "/api/providers/**",
                                 "/api/locations/**")
                         .permitAll()
+                        // Directory-data correction reports (CLAUDE.md "Report Privacy"): anonymous
+                        // submission is allowed by design, rate-limited by IP either way
+                        // (ReportRateLimiter) -- never require an account for a quick correction.
+                        // If the caller happens to be signed in, JwtAuthenticationFilter still runs
+                        // and populates Authentication regardless of this permitAll.
+                        .requestMatchers(HttpMethod.POST, "/api/providers/*/reports")
+                        .permitAll()
                         // Narrow on purpose: only the health probe is ever public. If
                         // management.endpoints.web.exposure.include is ever widened (e.g. to
                         // include env/beans/configprops), this rule must NOT accidentally expose

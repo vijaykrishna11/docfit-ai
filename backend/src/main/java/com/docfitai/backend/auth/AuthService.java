@@ -6,6 +6,7 @@ import com.docfitai.backend.account.RefreshToken;
 import com.docfitai.backend.account.RefreshTokenRepository;
 import com.docfitai.backend.account.SavedProviderRepository;
 import com.docfitai.backend.account.SavedSearchRepository;
+import com.docfitai.backend.account.ShortlistRepository;
 import com.docfitai.backend.auth.dto.UserDto;
 import java.time.Instant;
 import java.util.Locale;
@@ -23,6 +24,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final SavedProviderRepository savedProviderRepository;
     private final SavedSearchRepository savedSearchRepository;
+    private final ShortlistRepository shortlistRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthRateLimiter rateLimiter;
@@ -33,6 +35,7 @@ public class AuthService {
             RefreshTokenRepository refreshTokenRepository,
             SavedProviderRepository savedProviderRepository,
             SavedSearchRepository savedSearchRepository,
+            ShortlistRepository shortlistRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthRateLimiter rateLimiter,
@@ -41,6 +44,7 @@ public class AuthService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.savedProviderRepository = savedProviderRepository;
         this.savedSearchRepository = savedSearchRepository;
+        this.shortlistRepository = shortlistRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.rateLimiter = rateLimiter;
@@ -120,6 +124,9 @@ public class AuthService {
     @Transactional
     public void deleteAccount(Long userId) {
         requireUser(userId);
+        // shortlist_provider rows cascade at the DB level once their parent provider_shortlist
+        // row is deleted (V11, ON DELETE CASCADE) -- deleting the shortlists themselves is enough.
+        shortlistRepository.deleteByUserId(userId);
         savedProviderRepository.deleteByUserId(userId);
         savedSearchRepository.deleteByUserId(userId);
         refreshTokenRepository.deleteByUserId(userId);

@@ -9,4 +9,6 @@ public interface ProviderLocationRepository extends JpaRepository<ProviderLocati
     Optional<ProviderLocation> findByProviderIdAndNormalizedKey(Long providerId, String normalizedKey);
 
     List<ProviderLocation> findByProviderIdOrderByPrimaryDescId(Long providerId);
+
+    boolean existsByIdAndProviderId(Long id, Long providerId);
 }
