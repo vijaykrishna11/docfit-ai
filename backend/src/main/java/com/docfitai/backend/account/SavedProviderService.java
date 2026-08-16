@@ -76,9 +76,21 @@ public class SavedProviderService {
         if (!providerRepository.existsById(providerId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Provider not found.");
         }
-        if (!savedProviderRepository.existsByUserIdAndProviderId(userId, providerId)) {
-            savedProviderRepository.save(new SavedProvider(userId, providerId, Instant.now()));
-        }
+        // ON CONFLICT DO NOTHING rather than "check then insert": two save requests for the same
+        // provider racing past a separate existence check (e.g. a double-click) would both try to
+        // insert, and the loser's DataIntegrityViolationException from saved_provider's
+        // UNIQUE (user_id, provider_id) constraint can't be caught-and-continued here -- Hibernate
+        // marks a @Transactional method's transaction rollback-only the moment the constraint
+        // violation happens during flush, so Spring throws UnexpectedRollbackException at commit
+        // regardless of any try/catch around the save() call (verified directly: an earlier
+        // try/catch version of this method failed a concurrent-save test with exactly that
+        // exception). A single conflict-tolerant INSERT has no such trap.
+        jdbcTemplate.update(
+                "INSERT INTO saved_provider (user_id, provider_id, created_at) VALUES (?, ?, ?) "
+                        + "ON CONFLICT (user_id, provider_id) DO NOTHING",
+                userId,
+                providerId,
+                java.sql.Timestamp.from(Instant.now()));
     }
 
     @Transactional
