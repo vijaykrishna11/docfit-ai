@@ -1,21 +1,40 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SavedProviderDto } from '../api/types'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 import { BadgeIcon, BookmarkIcon, DirectionsIcon, LocationIcon, PhoneIcon } from '../components/icons'
+import ShareSelectedProvidersButton from '../components/ShareSelectedProvidersButton'
 import { useSavedProviders } from '../context/SavedProvidersContext'
 import { directionsUrl, formattedAddress, initialsFor, providerDisplayName, telHref } from '../utils/providerDisplay'
 
 function SavedProvidersPage() {
   const { savedProviders, isLoading, toggleSaved } = useSavedProviders()
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  function toggleSelection(providerId: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(providerId)) next.delete(providerId)
+      else next.add(providerId)
+      return next
+    })
+  }
 
   return (
     <div className="page">
       <Header />
       <main className="container detail-content">
-        <div>
-          <h1>Saved providers</h1>
-          <p className="results-subtext">Providers you've chosen to keep track of. Only you can see this list.</p>
+        <div className="shortlist-detail-header">
+          <div>
+            <h1>Saved providers</h1>
+            <p className="results-subtext">Providers you've chosen to keep track of. Only you can see this list.</p>
+          </div>
+          {savedProviders.length > 0 && (
+            <div className="shortlist-detail-actions">
+              <ShareSelectedProvidersButton selectedIds={Array.from(selectedIds)} />
+            </div>
+          )}
         </div>
 
         {isLoading && <p className="results-heading-loading">Loading your saved providers…</p>}
@@ -38,7 +57,13 @@ function SavedProvidersPage() {
         {!isLoading && savedProviders.length > 0 && (
           <ul className="provider-list">
             {savedProviders.map((provider) => (
-              <SavedProviderCard key={provider.id} provider={provider} onRemove={() => toggleSaved(provider.providerId)} />
+              <SavedProviderCard
+                key={provider.id}
+                provider={provider}
+                selected={selectedIds.has(provider.providerId)}
+                onToggleSelect={() => toggleSelection(provider.providerId)}
+                onRemove={() => toggleSaved(provider.providerId)}
+              />
             ))}
           </ul>
         )}
@@ -48,13 +73,27 @@ function SavedProvidersPage() {
   )
 }
 
-function SavedProviderCard({ provider, onRemove }: { provider: SavedProviderDto; onRemove: () => void }) {
+function SavedProviderCard({
+  provider,
+  selected,
+  onToggleSelect,
+  onRemove,
+}: {
+  provider: SavedProviderDto
+  selected: boolean
+  onToggleSelect: () => void
+  onRemove: () => void
+}) {
   const name = providerDisplayName(provider)
   const location = provider.location
 
   return (
-    <li className="provider-card">
+    <li className={`provider-card${selected ? ' is-selected' : ''}`}>
       <div className="provider-card-top">
+        <label className="compare-checkbox" style={{ marginRight: 4 }}>
+          <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={`Select ${name} to share`} />
+          <span className="compare-checkbox-box" aria-hidden="true" />
+        </label>
         <div className="avatar" aria-hidden="true">
           {initialsFor(name)}
         </div>

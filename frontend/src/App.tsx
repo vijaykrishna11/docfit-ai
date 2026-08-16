@@ -13,6 +13,9 @@ import ProviderDetailPage from './pages/ProviderDetailPage'
 import RegisterPage from './pages/RegisterPage'
 import SavedProvidersPage from './pages/SavedProvidersPage'
 import SavedSearchesPage from './pages/SavedSearchesPage'
+import SharedProvidersPage from './pages/SharedProvidersPage'
+import ShortlistDetailPage from './pages/ShortlistDetailPage'
+import ShortlistsPage from './pages/ShortlistsPage'
 import SignInPage from './pages/SignInPage'
 
 function App() {
@@ -26,6 +29,7 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/providers/:id" element={<ProviderDetailPage />} />
                 <Route path="/compare" element={<ComparePage />} />
+                <Route path="/share/providers" element={<SharedProvidersPage />} />
                 <Route path="/signin" element={<SignInPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route
@@ -49,6 +53,22 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <SavedSearchesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/shortlists"
+                  element={
+                    <ProtectedRoute>
+                      <ShortlistsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/shortlists/:id"
+                  element={
+                    <ProtectedRoute>
+                      <ShortlistDetailPage />
                     </ProtectedRoute>
                   }
                 />

@@ -17,10 +17,12 @@ import {
   PhoneIcon,
   ShareIcon,
 } from '../components/icons'
+import AddToShortlistMenu from '../components/AddToShortlistMenu'
 import NetworkEvidenceDrawer from '../components/NetworkEvidenceDrawer'
 import ReportIncorrectInfoModal from '../components/ReportIncorrectInfoModal'
 import SaveProviderButton from '../components/SaveProviderButton'
 import WhyThisResult from '../components/WhyThisResult'
+import { useAuth } from '../context/AuthContext'
 import {
   directionsUrl,
   formatDistance,
@@ -134,6 +136,7 @@ function LocationPrecisionNote({ location }: { location: ProviderLocationDto }) 
 }
 
 function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; planId?: number }) {
+  const { isAuthenticated } = useAuth()
   const name = providerDisplayName(detail)
   const isOrganization = detail.entityType === 'ORGANIZATION'
   const primaryTaxonomy = detail.taxonomies.find((taxonomy) => taxonomy.primaryTaxonomy) ?? detail.taxonomies[0]
@@ -197,6 +200,7 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
           </a>
         )}
         <SaveProviderButton providerId={detail.id} variant="labeled" />
+        {isAuthenticated && <AddToShortlistMenu providerId={detail.id} />}
         <button type="button" className={`secondary-button${shareCopied ? ' is-success' : ''}`} onClick={handleShare}>
           {shareCopied ? (
             <>

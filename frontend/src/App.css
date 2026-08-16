@@ -3098,3 +3098,111 @@ button.area-zip-chip {
   gap: 6px;
   align-self: flex-start;
 }
+
+/* ---------- Care Discovery V3: shortlists ---------- */
+
+.add-to-shortlist-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.add-to-shortlist-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.add-to-shortlist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.add-to-shortlist-create {
+  display: flex;
+  gap: 8px;
+}
+
+.add-to-shortlist-create input {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.shortlist-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+  color: inherit;
+}
+
+.shortlist-summary-card:hover {
+  border-color: var(--primary-border);
+}
+
+.shortlist-summary-card h3 {
+  overflow-wrap: anywhere;
+}
+
+.shortlist-summary-count {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.create-shortlist-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.create-shortlist-form .field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.shortlist-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.shortlist-detail-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shortlist-rename-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

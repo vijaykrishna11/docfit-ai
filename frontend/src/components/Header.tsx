@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BookmarkIcon, LogOutIcon, UserIcon } from './icons'
+import { BookmarkIcon, FolderIcon, LogOutIcon, UserIcon } from './icons'
 
 const NAV_LINKS = [
   { href: '#search-panel', label: 'Find Care' },
@@ -88,6 +88,9 @@ function Header() {
               <>
                 <Link to="/saved" onClick={closeMenu}>
                   Saved providers
+                </Link>
+                <Link to="/shortlists" onClick={closeMenu}>
+                  Shortlists
                 </Link>
                 <Link to="/saved-searches" onClick={closeMenu}>
                   Saved searches
@@ -192,6 +195,10 @@ function AccountMenu({ displayName, onSignOut }: { displayName: string; onSignOu
           <Link to="/saved" role="menuitem" onClick={() => setOpen(false)}>
             <BookmarkIcon width={15} height={15} />
             Saved providers
+          </Link>
+          <Link to="/shortlists" role="menuitem" onClick={() => setOpen(false)}>
+            <FolderIcon width={15} height={15} />
+            Shortlists
           </Link>
           <Link to="/saved-searches" role="menuitem" onClick={() => setOpen(false)}>
             <BookmarkIcon width={15} height={15} />
