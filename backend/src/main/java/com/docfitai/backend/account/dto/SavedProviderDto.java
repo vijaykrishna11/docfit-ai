@@ -1,5 +1,6 @@
 package com.docfitai.backend.account.dto;
 
+import com.docfitai.backend.provider.dto.ProviderLocationDto;
 import java.time.Instant;
 
 public record SavedProviderDto(
@@ -7,13 +8,9 @@ public record SavedProviderDto(
         Instant savedAt,
         Long providerId,
         String npiNumber,
+        String entityType,
         String firstName,
         String lastName,
         String organizationName,
-        String phone,
-        String addressLine1,
-        String addressLine2,
-        String city,
-        String stateCode,
-        String postalCode) {
+        ProviderLocationDto location) {
 }

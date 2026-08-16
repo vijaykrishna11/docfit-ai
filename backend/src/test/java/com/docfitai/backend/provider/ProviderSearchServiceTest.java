@@ -42,7 +42,7 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(WRONG_SPECIALTY_NPI, "207N00000X", true);
 
         ProviderSearchResponseDto response = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20, null));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 200, null));
 
         Map<String, ProviderSearchResultDto> byNpi =
                 response.results().stream().collect(toMap(ProviderSearchResultDto::npiNumber, r -> r));
@@ -85,13 +85,16 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertProvider(near, "Near", "Doctor", "90802", "33.770000", "-118.191000");
         insertTaxonomy(near, "207RC0000X", true);
 
+        // size=200: this suite shares one database across many test classes with overlapping
+        // 90802/CARDIOLOGY fixtures, so a small page size can truncate before reaching this
+        // test's own provider -- bumped like the sort tests below already do.
         ProviderSearchResponseDto byLatLng = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", null, null, 33.770000, -118.191000, 25, "distance", 0, 20, null));
+                new ProviderSearchQuery("CARDIOLOGY", null, null, 33.770000, -118.191000, 25, "distance", 0, 200, null));
         assertThat(byLatLng.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
         assertThat(byLatLng.originLabel()).isNull();
 
         ProviderSearchResponseDto byCity = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", null, "Long Beach", null, null, 25, "distance", 0, 20, null));
+                new ProviderSearchQuery("CARDIOLOGY", null, "Long Beach", null, null, 25, "distance", 0, 200, null));
         assertThat(byCity.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
         assertThat(byCity.originLabel()).isEqualTo("Long Beach, CA");
     }
@@ -144,11 +147,11 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(midRange, "207RC0000X", true);
 
         ProviderSearchResponseDto at25 = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20, null));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 200, null));
         assertThat(at25.results()).extracting(ProviderSearchResultDto::npiNumber).doesNotContain(midRange);
 
         ProviderSearchResponseDto at50 = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 50, "distance", 0, 20, null));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 50, "distance", 0, 200, null));
         assertThat(at50.results()).extracting(ProviderSearchResultDto::npiNumber).contains(midRange);
     }
 
@@ -162,15 +165,9 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
     }
 
     private void insertProvider(String npi, String firstName, String lastName, String zip, String lat, String lon) {
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, "
-                        + "postal_code, latitude, longitude) VALUES (?, ?, ?, '1 Test St', 'Test City', 'CA', ?, ?, ?)",
-                npi,
-                firstName,
-                lastName,
-                zip,
-                new java.math.BigDecimal(lat),
-                new java.math.BigDecimal(lon));
+        insertProviderWithLocation(
+                jdbcTemplate, npi, firstName, lastName, "1 Test St", "Test City", "CA", zip, null,
+                Double.valueOf(lat), Double.valueOf(lon));
     }
 
     private void insertTaxonomy(String npi, String taxonomyCode, boolean primary) {

@@ -30,12 +30,8 @@ class ProviderSearchApiTest extends PostgresIntegrationSupport {
 
     @Test
     void searchEndpointReturnsMatchingProvider() throws Exception {
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, "
-                        + "postal_code, latitude, longitude) "
-                        + "VALUES (?, 'Api', 'TestDoctor', '200 Ocean Blvd', 'Long Beach', 'CA', '90802', 33.770000, -118.191000)",
-                NPI);
-        Long providerId = jdbcTemplate.queryForObject("SELECT id FROM provider WHERE npi_number = ?", Long.class, NPI);
+        Long providerId = insertProviderWithLocation(
+                jdbcTemplate, NPI, "Api", "TestDoctor", "200 Ocean Blvd", "Long Beach", "CA", "90802", null, 33.770000, -118.191000);
         jdbcTemplate.update(
                 "INSERT INTO provider_taxonomy (provider_id, taxonomy_code, primary_taxonomy) VALUES (?, '207RC0000X', true)",
                 providerId);

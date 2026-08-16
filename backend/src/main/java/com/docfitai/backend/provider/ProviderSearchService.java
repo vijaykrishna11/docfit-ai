@@ -2,6 +2,7 @@ package com.docfitai.backend.provider;
 
 import com.docfitai.backend.insurance.dto.NetworkEvidenceSummaryDto;
 import com.docfitai.backend.insurance.evidence.NetworkEvidenceService;
+import com.docfitai.backend.provider.dto.ProviderLocationDto;
 import com.docfitai.backend.provider.dto.ProviderSearchResponseDto;
 import com.docfitai.backend.provider.dto.ProviderSearchResultDto;
 import com.docfitai.backend.reference.Specialty;
@@ -11,6 +12,7 @@ import com.docfitai.backend.reference.ZipGeographyRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,13 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * A provider can have multiple practice locations and multiple matching taxonomies (CLAUDE.md
+ * 2, 10-11). Search must still return each qualifying provider exactly once, attached to the
+ * single nearest location that falls within the requested radius -- never once per office.
+ * Taxonomy selection (primary preferred) and location selection (nearest within radius) are
+ * independent choices, resolved together per provider from one query result set.
+ */
 @Service
 public class ProviderSearchService {
 
@@ -29,14 +38,16 @@ public class ProviderSearchService {
 
     private static final String MATCH_QUERY =
             """
-            SELECT p.id, p.npi_number, p.first_name, p.last_name, p.organization_name, p.phone,
-                   p.address_line_1, p.address_line_2, p.city, p.state_code, p.postal_code,
-                   p.latitude, p.longitude, pt.taxonomy_code, pt.primary_taxonomy, nt.display_name
+            SELECT p.id, p.npi_number, p.entity_type, p.first_name, p.last_name, p.organization_name,
+                   pt.taxonomy_code, pt.primary_taxonomy, nt.display_name,
+                   pl.id AS location_id, pl.address_line_1, pl.address_line_2, pl.city, pl.state_code,
+                   pl.postal_code, pl.phone, pl.latitude, pl.longitude, pl.coordinate_precision
             FROM provider p
             JOIN provider_taxonomy pt ON pt.provider_id = p.id
             JOIN npi_taxonomy nt ON nt.taxonomy_code = pt.taxonomy_code
+            JOIN provider_location pl ON pl.provider_id = p.id AND pl.address_purpose = 'LOCATION'
             WHERE pt.taxonomy_code IN (:taxonomyCodes)
-              AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+              AND pl.latitude IS NOT NULL AND pl.longitude IS NOT NULL
             """;
 
     private final SpecialtyRepository specialtyRepository;
@@ -77,56 +88,58 @@ public class ProviderSearchService {
             return new ProviderSearchResponseDto(List.of(), safePage, safeSize, 0, 0, origin.label());
         }
 
-        Map<Long, MatchRow> bestMatchByProvider = new LinkedHashMap<>();
+        // One entry per provider: identity fields, the best (primary-preferred) matching
+        // taxonomy, and the nearest qualifying location seen so far.
+        Map<Long, ProviderMatch> matchByProvider = new LinkedHashMap<>();
         MapSqlParameterSource params = new MapSqlParameterSource("taxonomyCodes", taxonomyCodes);
         jdbcTemplate.query(MATCH_QUERY, params, rs -> {
             long providerId = rs.getLong("id");
-            boolean primary = rs.getBoolean("primary_taxonomy");
-            MatchRow existing = bestMatchByProvider.get(providerId);
-            if (existing == null || (primary && !existing.primaryTaxonomy())) {
-                bestMatchByProvider.put(
+            double distance = haversineMiles(
+                    origin.latitude(), origin.longitude(), rs.getBigDecimal("latitude").doubleValue(),
+                    rs.getBigDecimal("longitude").doubleValue());
+
+            ProviderMatch existing = matchByProvider.get(providerId);
+            if (existing == null) {
+                existing = new ProviderMatch(
                         providerId,
-                        new MatchRow(
-                                providerId,
-                                rs.getString("npi_number"),
-                                rs.getString("first_name"),
-                                rs.getString("last_name"),
-                                rs.getString("organization_name"),
-                                rs.getString("phone"),
-                                rs.getString("address_line_1"),
-                                rs.getString("address_line_2"),
-                                rs.getString("city"),
-                                rs.getString("state_code"),
-                                rs.getString("postal_code"),
-                                rs.getBigDecimal("latitude"),
-                                rs.getBigDecimal("longitude"),
-                                rs.getString("taxonomy_code"),
-                                rs.getString("display_name"),
-                                primary));
+                        rs.getString("npi_number"),
+                        rs.getString("entity_type"),
+                        rs.getString("first_name"),
+                        rs.getString("last_name"),
+                        rs.getString("organization_name"));
+                matchByProvider.put(providerId, existing);
             }
+            existing.considerTaxonomy(rs.getString("taxonomy_code"), rs.getString("display_name"), rs.getBoolean("primary_taxonomy"));
+            existing.considerLocation(
+                    rs.getLong("location_id"),
+                    rs.getString("address_line_1"),
+                    rs.getString("address_line_2"),
+                    rs.getString("city"),
+                    rs.getString("state_code"),
+                    rs.getString("postal_code"),
+                    rs.getString("phone"),
+                    rs.getBigDecimal("latitude"),
+                    rs.getBigDecimal("longitude"),
+                    rs.getString("coordinate_precision"),
+                    distance);
         });
 
         List<ProviderSearchResultDto> withinRadius = new ArrayList<>();
-        for (MatchRow row : bestMatchByProvider.values()) {
-            double distance = haversineMiles(
-                    origin.latitude(), origin.longitude(), row.latitude().doubleValue(), row.longitude().doubleValue());
-            if (distance <= radiusMiles) {
-                withinRadius.add(new ProviderSearchResultDto(
-                        row.providerId(),
-                        row.npiNumber(),
-                        row.firstName(),
-                        row.lastName(),
-                        row.organizationName(),
-                        row.phone(),
-                        row.addressLine1(),
-                        row.addressLine2(),
-                        row.city(),
-                        row.stateCode(),
-                        row.postalCode(),
-                        row.taxonomyCode(),
-                        row.taxonomyDisplayName(),
-                        Math.round(distance * 10.0) / 10.0));
+        for (ProviderMatch match : matchByProvider.values()) {
+            if (match.nearestDistance == null || match.nearestDistance > radiusMiles) {
+                continue;
             }
+            withinRadius.add(new ProviderSearchResultDto(
+                    match.providerId,
+                    match.npiNumber,
+                    match.entityType,
+                    match.firstName,
+                    match.lastName,
+                    match.organizationName,
+                    match.taxonomyCode,
+                    match.taxonomyDisplayName,
+                    match.nearestLocation,
+                    Math.round(match.nearestDistance * 10.0) / 10.0));
         }
 
         Comparator<ProviderSearchResultDto> nameComparator =
@@ -139,6 +152,8 @@ public class ProviderSearchService {
             withinRadius.sort(Comparator.comparingDouble(ProviderSearchResultDto::distanceMiles));
         }
 
+        // Pagination counts providers, not location rows (CLAUDE.md 47) -- withinRadius already
+        // has exactly one entry per qualifying provider by construction.
         int totalElements = withinRadius.size();
         int totalPages = (int) Math.ceil(totalElements / (double) safeSize);
         int fromIndex = Math.min(safePage * safeSize, totalElements);
@@ -151,15 +166,19 @@ public class ProviderSearchService {
 
     /**
      * Batched, single-query evidence lookup for the page actually being returned -- never one
-     * lookup per provider (CLAUDE.md 89-91). Omitting {@code planId} leaves every result's
+     * lookup per provider (CLAUDE.md 89-91). Evidence is looked up against the specific location
+     * each result is showing (CLAUDE.md 9). Omitting {@code planId} leaves every result's
      * networkEvidence field null rather than a fabricated status.
      */
     private List<ProviderSearchResultDto> attachNetworkEvidence(List<ProviderSearchResultDto> pageResults, Long planId) {
         if (planId == null || pageResults.isEmpty()) {
             return pageResults;
         }
-        List<Long> providerIds = pageResults.stream().map(ProviderSearchResultDto::id).toList();
-        Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider = networkEvidenceService.summarizeForProviders(providerIds, planId);
+        Map<Long, Long> providerLocations = new HashMap<>();
+        for (ProviderSearchResultDto result : pageResults) {
+            providerLocations.put(result.id(), result.location() == null ? null : result.location().id());
+        }
+        Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider = networkEvidenceService.summarizeForProviders(providerLocations, planId);
         return pageResults.stream()
                 .map(result -> result.withNetworkEvidence(evidenceByProvider.get(result.id())))
                 .toList();
@@ -234,22 +253,57 @@ public class ProviderSearchService {
     record Origin(double latitude, double longitude, String label) {
     }
 
-    private record MatchRow(
-            long providerId,
-            String npiNumber,
-            String firstName,
-            String lastName,
-            String organizationName,
-            String phone,
-            String addressLine1,
-            String addressLine2,
-            String city,
-            String stateCode,
-            String postalCode,
-            BigDecimal latitude,
-            BigDecimal longitude,
-            String taxonomyCode,
-            String taxonomyDisplayName,
-            boolean primaryTaxonomy) {
+    /** Accumulates the best taxonomy match and nearest qualifying location seen for one provider across the result set. */
+    private static final class ProviderMatch {
+        final long providerId;
+        final String npiNumber;
+        final String entityType;
+        final String firstName;
+        final String lastName;
+        final String organizationName;
+
+        String taxonomyCode;
+        String taxonomyDisplayName;
+        boolean primaryTaxonomy;
+
+        ProviderLocationDto nearestLocation;
+        Double nearestDistance;
+
+        ProviderMatch(long providerId, String npiNumber, String entityType, String firstName, String lastName, String organizationName) {
+            this.providerId = providerId;
+            this.npiNumber = npiNumber;
+            this.entityType = entityType;
+            this.firstName = firstName;
+            this.lastName = lastName;
+            this.organizationName = organizationName;
+        }
+
+        void considerTaxonomy(String code, String displayName, boolean primary) {
+            if (taxonomyCode == null || (primary && !primaryTaxonomy)) {
+                taxonomyCode = code;
+                taxonomyDisplayName = displayName;
+                primaryTaxonomy = primary;
+            }
+        }
+
+        void considerLocation(
+                long locationId,
+                String addressLine1,
+                String addressLine2,
+                String city,
+                String stateCode,
+                String postalCode,
+                String phone,
+                BigDecimal latitude,
+                BigDecimal longitude,
+                String coordinatePrecision,
+                double distance) {
+            if (nearestDistance == null || distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestLocation = new ProviderLocationDto(
+                        locationId, addressLine1, addressLine2, city, stateCode, postalCode, phone, latitude, longitude,
+                        coordinatePrecision);
+            }
+        }
     }
 }

@@ -18,11 +18,12 @@ public class ProviderNameSearchService {
 
     private static final String QUERY =
             """
-            SELECT DISTINCT ON (p.id) p.id, p.npi_number, p.first_name, p.last_name, p.organization_name,
-                   p.city, p.state_code, nt.display_name
+            SELECT DISTINCT ON (p.id) p.id, p.npi_number, p.entity_type, p.first_name, p.last_name,
+                   p.organization_name, pl.city, pl.state_code, nt.display_name
             FROM provider p
             JOIN provider_taxonomy pt ON pt.provider_id = p.id
             JOIN npi_taxonomy nt ON nt.taxonomy_code = pt.taxonomy_code
+            LEFT JOIN provider_location pl ON pl.provider_id = p.id AND pl.is_primary = TRUE
             WHERE p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.organization_name ILIKE ?
             ORDER BY p.id, pt.primary_taxonomy DESC
             LIMIT ?
@@ -44,6 +45,7 @@ public class ProviderNameSearchService {
                 (rs, rowNum) -> new ProviderNameSearchResultDto(
                         rs.getLong("id"),
                         rs.getString("npi_number"),
+                        rs.getString("entity_type"),
                         rs.getString("first_name"),
                         rs.getString("last_name"),
                         rs.getString("organization_name"),

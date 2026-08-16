@@ -2,20 +2,20 @@ package com.docfitai.backend.provider.dto;
 
 import com.docfitai.backend.insurance.dto.NetworkEvidenceSummaryDto;
 
+/**
+ * One provider per result (never repeated per office, CLAUDE.md 2), carrying the single nearest
+ * qualifying {@link ProviderLocationDto} for this search's origin/radius.
+ */
 public record ProviderSearchResultDto(
         Long id,
         String npiNumber,
+        String entityType,
         String firstName,
         String lastName,
         String organizationName,
-        String phone,
-        String addressLine1,
-        String addressLine2,
-        String city,
-        String stateCode,
-        String postalCode,
         String taxonomyCode,
         String specialtyDisplayName,
+        ProviderLocationDto location,
         double distanceMiles,
         NetworkEvidenceSummaryDto networkEvidence) {
 
@@ -23,26 +23,20 @@ public record ProviderSearchResultDto(
     public ProviderSearchResultDto(
             Long id,
             String npiNumber,
+            String entityType,
             String firstName,
             String lastName,
             String organizationName,
-            String phone,
-            String addressLine1,
-            String addressLine2,
-            String city,
-            String stateCode,
-            String postalCode,
             String taxonomyCode,
             String specialtyDisplayName,
+            ProviderLocationDto location,
             double distanceMiles) {
-        this(
-                id, npiNumber, firstName, lastName, organizationName, phone, addressLine1, addressLine2, city, stateCode,
-                postalCode, taxonomyCode, specialtyDisplayName, distanceMiles, null);
+        this(id, npiNumber, entityType, firstName, lastName, organizationName, taxonomyCode, specialtyDisplayName, location, distanceMiles, null);
     }
 
     public ProviderSearchResultDto withNetworkEvidence(NetworkEvidenceSummaryDto evidence) {
         return new ProviderSearchResultDto(
-                id, npiNumber, firstName, lastName, organizationName, phone, addressLine1, addressLine2, city, stateCode,
-                postalCode, taxonomyCode, specialtyDisplayName, distanceMiles, evidence);
+                id, npiNumber, entityType, firstName, lastName, organizationName, taxonomyCode, specialtyDisplayName, location,
+                distanceMiles, evidence);
     }
 }

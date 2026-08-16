@@ -34,12 +34,8 @@ class SavedProviderAuthorizationTest extends PostgresIntegrationSupport {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private Long insertProvider(String npi) {
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, "
-                        + "postal_code, latitude, longitude) "
-                        + "VALUES (?, 'Saved', 'TestDoctor', '1 Test St', 'Long Beach', 'CA', '90802', 33.77, -118.19)",
-                npi);
-        return jdbcTemplate.queryForObject("SELECT id FROM provider WHERE npi_number = ?", Long.class, npi);
+        return insertProviderWithLocation(
+                jdbcTemplate, npi, "Saved", "TestDoctor", "1 Test St", "Long Beach", "CA", "90802", null, 33.77, -118.19);
     }
 
     @Test
