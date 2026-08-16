@@ -7,6 +7,8 @@ import { evidenceStatusCopy, formatCheckedAt, freshnessCopy, matchMethodCopy } f
 interface NetworkEvidenceDrawerProps {
   providerId: number
   planId: number
+  /** The specific practice location being shown, if known -- evidence tied to a different office is never applied here (CLAUDE.md 9). */
+  locationId?: number
   onClose: () => void
 }
 
@@ -15,7 +17,7 @@ interface NetworkEvidenceDrawerProps {
  * Escape closes, close button is reachable by keyboard. Never renders "covered" or
  * "in network" -- only what DocFit AI actually knows, sourced and dated.
  */
-function NetworkEvidenceDrawer({ providerId, planId, onClose }: NetworkEvidenceDrawerProps) {
+function NetworkEvidenceDrawer({ providerId, planId, locationId, onClose }: NetworkEvidenceDrawerProps) {
   const [detail, setDetail] = useState<NetworkEvidenceDetailDto | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -32,7 +34,7 @@ function NetworkEvidenceDrawer({ providerId, planId, onClose }: NetworkEvidenceD
 
   useEffect(() => {
     let cancelled = false
-    fetchProviderNetworkEvidence(providerId, planId)
+    fetchProviderNetworkEvidence(providerId, planId, locationId)
       .then((result) => {
         if (!cancelled) setDetail(result)
       })
@@ -46,7 +48,7 @@ function NetworkEvidenceDrawer({ providerId, planId, onClose }: NetworkEvidenceD
     return () => {
       cancelled = true
     }
-  }, [providerId, planId])
+  }, [providerId, planId, locationId])
 
   return (
     <div className="modal-overlay" onClick={onClose}>

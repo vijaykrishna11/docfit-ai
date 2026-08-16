@@ -6,11 +6,12 @@ import { evidenceStatusCopy, evidenceStatusHint, freshnessCopy } from '../utils/
 interface NetworkEvidenceBadgeProps {
   providerId: number
   planId: number
+  locationId?: number
   evidence: NetworkEvidenceSummaryDto
 }
 
 /** Compact insurance panel for a provider card/result (CLAUDE.md 32). */
-function NetworkEvidenceBadge({ providerId, planId, evidence }: NetworkEvidenceBadgeProps) {
+function NetworkEvidenceBadge({ providerId, planId, locationId, evidence }: NetworkEvidenceBadgeProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
@@ -27,7 +28,7 @@ function NetworkEvidenceBadge({ providerId, planId, evidence }: NetworkEvidenceB
       </button>
 
       {drawerOpen && (
-        <NetworkEvidenceDrawer providerId={providerId} planId={planId} onClose={() => setDrawerOpen(false)} />
+        <NetworkEvidenceDrawer providerId={providerId} planId={planId} locationId={locationId} onClose={() => setDrawerOpen(false)} />
       )}
     </div>
   )

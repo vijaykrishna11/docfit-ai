@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, fetchProviderDetail } from '../api/client'
-import type { ProviderDetailDto } from '../api/types'
+import type { ProviderDetailDto, ProviderLocationDto } from '../api/types'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 import {
@@ -119,9 +119,20 @@ function ProviderDetailPage() {
   )
 }
 
+function LocationPrecisionNote({ location }: { location: ProviderLocationDto }) {
+  if (location.coordinatePrecision !== 'ZIP_CENTROID' && location.coordinatePrecision !== 'CITY_CENTROID') {
+    return null
+  }
+  return (
+    <p className="field-hint">
+      <InfoIcon width={13} height={13} /> Distance and map position are approximate (ZIP-level), not this office's exact address.
+    </p>
+  )
+}
+
 function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; planId?: number }) {
   const name = providerDisplayName(detail)
-  const { line1, line2 } = formattedAddress(detail)
+  const location = detail.location
   const primaryTaxonomy = detail.taxonomies.find((taxonomy) => taxonomy.primaryTaxonomy) ?? detail.taxonomies[0]
   const [shareCopied, setShareCopied] = useState(false)
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
@@ -157,16 +168,18 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
       </div>
 
       <div className="provider-detail-actions">
-        {detail.phone && (
-          <a className="primary-button" href={telHref(detail.phone)}>
+        {location?.phone && (
+          <a className="primary-button" href={telHref(location.phone)}>
             <PhoneIcon width={16} height={16} />
-            Call {detail.phone}
+            Call {location.phone}
           </a>
         )}
-        <a className="secondary-button" href={directionsUrl(detail)} target="_blank" rel="noopener noreferrer">
-          <DirectionsIcon width={16} height={16} />
-          Get directions
-        </a>
+        {location && (
+          <a className="secondary-button" href={directionsUrl(location)} target="_blank" rel="noopener noreferrer">
+            <DirectionsIcon width={16} height={16} />
+            Get directions
+          </a>
+        )}
         <SaveProviderButton providerId={detail.id} variant="labeled" />
         <button type="button" className={`secondary-button${shareCopied ? ' is-success' : ''}`} onClick={handleShare}>
           {shareCopied ? (
@@ -184,17 +197,20 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
       </div>
 
       <dl className="provider-detail-grid">
-        <div>
-          <dt>
-            <LocationIcon width={13} height={13} />
-            Practice address
-          </dt>
-          <dd>
-            {line1}
-            <br />
-            {line2}
-          </dd>
-        </div>
+        {location && (
+          <div>
+            <dt>
+              <LocationIcon width={13} height={13} />
+              {detail.otherLocations.length > 0 ? 'Nearest practice location' : 'Practice address'}
+            </dt>
+            <dd>
+              {formattedAddress(location).line1}
+              <br />
+              {formattedAddress(location).line2}
+              <LocationPrecisionNote location={location} />
+            </dd>
+          </div>
+        )}
         <div>
           <dt>
             <BadgeIcon width={13} height={13} />
@@ -202,16 +218,58 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
           </dt>
           <dd>{detail.npiNumber}</dd>
         </div>
-        {detail.phone && (
+        {location?.phone && (
           <div>
             <dt>
               <PhoneIcon width={13} height={13} />
               Phone
             </dt>
-            <dd>{detail.phone}</dd>
+            <dd>{location.phone}</dd>
           </div>
         )}
       </dl>
+
+      {detail.otherLocations.length > 0 && (
+        <section className="provider-other-locations">
+          <h2>Other locations</h2>
+          <ul className="provider-other-locations-list">
+            {detail.otherLocations.map((otherLocation) => {
+              const { line1, line2 } = formattedAddress(otherLocation)
+              return (
+                <li key={otherLocation.id} className="provider-other-location-item">
+                  <p className="detail">
+                    <LocationIcon width={15} height={15} />
+                    <span>
+                      {line1}
+                      <br />
+                      {line2}
+                    </span>
+                  </p>
+                  {otherLocation.phone && (
+                    <p className="detail">
+                      <PhoneIcon width={15} height={15} />
+                      <span>{otherLocation.phone}</span>
+                    </p>
+                  )}
+                  <LocationPrecisionNote location={otherLocation} />
+                  <div className="provider-card-buttons">
+                    {otherLocation.phone && (
+                      <a className="ghost-button" href={telHref(otherLocation.phone)}>
+                        <PhoneIcon width={14} height={14} />
+                        Call
+                      </a>
+                    )}
+                    <a className="ghost-button" href={directionsUrl(otherLocation)} target="_blank" rel="noopener noreferrer">
+                      <DirectionsIcon width={14} height={14} />
+                      Directions
+                    </a>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="provider-taxonomies">
         <h2>Taxonomy information</h2>
@@ -248,7 +306,12 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
             View network evidence
           </button>
           {evidenceDrawerOpen && (
-            <NetworkEvidenceDrawer providerId={detail.id} planId={planId} onClose={() => setEvidenceDrawerOpen(false)} />
+            <NetworkEvidenceDrawer
+              providerId={detail.id}
+              planId={planId}
+              locationId={location?.id}
+              onClose={() => setEvidenceDrawerOpen(false)}
+            />
           )}
         </div>
       ) : (

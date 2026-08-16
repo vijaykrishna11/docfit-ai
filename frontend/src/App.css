@@ -1880,6 +1880,34 @@ button.area-zip-chip {
   color: var(--text-h);
 }
 
+.provider-other-locations {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.provider-other-locations-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.provider-other-location-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.provider-other-location-item .provider-card-buttons {
+  margin-top: 4px;
+}
+
 .provider-taxonomies {
   padding-top: 20px;
   border-top: 1px solid var(--border);

@@ -112,14 +112,20 @@ function ComparePage() {
                   ))}
                 </tr>
                 <tr>
-                  <th scope="row">Address</th>
+                  <th scope="row">Practice location shown</th>
                   {providers.map((provider) => {
-                    const { line1, line2 } = formattedAddress(provider)
+                    if (!provider.location) {
+                      return <td key={provider.id}>—</td>
+                    }
+                    const { line1, line2 } = formattedAddress(provider.location)
                     return (
                       <td key={provider.id}>
                         {line1}
                         <br />
                         {line2}
+                        {provider.otherLocations.length > 0 && (
+                          <div className="field-hint">+{provider.otherLocations.length} other location(s)</div>
+                        )}
                       </td>
                     )
                   })}
@@ -127,7 +133,7 @@ function ComparePage() {
                 <tr>
                   <th scope="row">Phone</th>
                   {providers.map((provider) => (
-                    <td key={provider.id}>{provider.phone ?? '—'}</td>
+                    <td key={provider.id}>{provider.location?.phone ?? '—'}</td>
                   ))}
                 </tr>
                 <tr>
@@ -147,21 +153,23 @@ function ComparePage() {
                   {providers.map((provider) => (
                     <td key={provider.id}>
                       <div className="compare-actions">
-                        {provider.phone && (
-                          <a className="ghost-button" href={telHref(provider.phone)}>
+                        {provider.location?.phone && (
+                          <a className="ghost-button" href={telHref(provider.location.phone)}>
                             <PhoneIcon width={14} height={14} />
                             Call
                           </a>
                         )}
-                        <a
-                          className="ghost-button"
-                          href={directionsUrl(provider)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <DirectionsIcon width={14} height={14} />
-                          Directions
-                        </a>
+                        {provider.location && (
+                          <a
+                            className="ghost-button"
+                            href={directionsUrl(provider.location)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <DirectionsIcon width={14} height={14} />
+                            Directions
+                          </a>
+                        )}
                         <Link className="ghost-button" to={`/providers/${provider.id}`}>
                           View provider
                         </Link>

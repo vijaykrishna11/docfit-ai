@@ -9,6 +9,7 @@ interface WhyThisResultProps {
   distanceMiles?: number | null
   originLabel?: string | null
   networkEvidence?: NetworkEvidenceSummaryDto | null
+  coordinatePrecision?: string | null
 }
 
 /**
@@ -16,7 +17,15 @@ interface WhyThisResultProps {
  * something DocFit AI actually knows and can verify from its own data -- never a score, rank,
  * or "best match" claim.
  */
-function WhyThisResult({ specialtyDisplayName, npiNumber, distanceMiles, originLabel, networkEvidence }: WhyThisResultProps) {
+function WhyThisResult({
+  specialtyDisplayName,
+  npiNumber,
+  distanceMiles,
+  originLabel,
+  networkEvidence,
+  coordinatePrecision,
+}: WhyThisResultProps) {
+  const isApproximate = coordinatePrecision === 'ZIP_CENTROID' || coordinatePrecision === 'CITY_CENTROID'
   return (
     <details className="why-this-result">
       <summary>
@@ -45,6 +54,14 @@ function WhyThisResult({ specialtyDisplayName, npiNumber, distanceMiles, originL
             <strong>Source:</strong> Provider identity found in public NPPES/NPI data (NPI {npiNumber})
           </span>
         </li>
+        {isApproximate && (
+          <li className="why-this-result-info">
+            <InfoIcon width={14} height={14} />
+            <span>
+              <strong>Location precision:</strong> ZIP-level approximate, not this office's exact address
+            </span>
+          </li>
+        )}
         {networkEvidence ? (
           <li className={networkEvidence.status === 'EVIDENCE_FOUND' ? '' : 'why-this-result-info'}>
             {networkEvidence.status === 'EVIDENCE_FOUND' ? (

@@ -28,7 +28,7 @@ interface ProviderCardProps {
 function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: ProviderCardProps) {
   const { isSelected, toggle, isFull } = useCompare()
   const name = providerDisplayName(provider)
-  const { line1, line2 } = formattedAddress(provider)
+  const { line1, line2 } = formattedAddress(provider.location)
   const selected = isSelected(provider.id)
   const disableCompareToggle = !selected && isFull
   const style = {
@@ -63,10 +63,10 @@ function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: Prov
             {line2}
           </span>
         </p>
-        {provider.phone && (
+        {provider.location.phone && (
           <p className="detail">
             <PhoneIcon width={16} height={16} />
-            <span>{provider.phone}</span>
+            <span>{provider.location.phone}</span>
           </p>
         )}
         <p className="npi">
@@ -74,7 +74,12 @@ function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: Prov
           <span>NPI {provider.npiNumber}</span>
         </p>
         {planId != null && provider.networkEvidence && (
-          <NetworkEvidenceBadge providerId={provider.id} planId={planId} evidence={provider.networkEvidence} />
+          <NetworkEvidenceBadge
+            providerId={provider.id}
+            planId={planId}
+            locationId={provider.location.id}
+            evidence={provider.networkEvidence}
+          />
         )}
         <WhyThisResult
           specialtyDisplayName={provider.specialtyDisplayName}
@@ -82,6 +87,7 @@ function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: Prov
           distanceMiles={provider.distanceMiles}
           originLabel={originLabel}
           networkEvidence={provider.networkEvidence}
+          coordinatePrecision={provider.location.coordinatePrecision}
         />
       </div>
 
@@ -100,13 +106,13 @@ function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: Prov
         </label>
 
         <div className="provider-card-buttons">
-          {provider.phone && (
-            <a className="ghost-button" href={telHref(provider.phone)}>
+          {provider.location.phone && (
+            <a className="ghost-button" href={telHref(provider.location.phone)}>
               <PhoneIcon width={14} height={14} />
               Call
             </a>
           )}
-          <a className="ghost-button" href={directionsUrl(provider)} target="_blank" rel="noopener noreferrer">
+          <a className="ghost-button" href={directionsUrl(provider.location)} target="_blank" rel="noopener noreferrer">
             <DirectionsIcon width={14} height={14} />
             Directions
           </a>

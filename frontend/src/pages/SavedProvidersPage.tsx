@@ -50,7 +50,7 @@ function SavedProvidersPage() {
 
 function SavedProviderCard({ provider, onRemove }: { provider: SavedProviderDto; onRemove: () => void }) {
   const name = providerDisplayName(provider)
-  const { line1, line2 } = formattedAddress(provider)
+  const location = provider.location
 
   return (
     <li className="provider-card">
@@ -64,18 +64,20 @@ function SavedProviderCard({ provider, onRemove }: { provider: SavedProviderDto;
       </div>
 
       <div className="provider-card-details">
-        <p className="detail">
-          <LocationIcon width={16} height={16} />
-          <span>
-            {line1}
-            <br />
-            {line2}
-          </span>
-        </p>
-        {provider.phone && (
+        {location && (
+          <p className="detail">
+            <LocationIcon width={16} height={16} />
+            <span>
+              {formattedAddress(location).line1}
+              <br />
+              {formattedAddress(location).line2}
+            </span>
+          </p>
+        )}
+        {location?.phone && (
           <p className="detail">
             <PhoneIcon width={16} height={16} />
-            <span>{provider.phone}</span>
+            <span>{location.phone}</span>
           </p>
         )}
         <p className="npi">
@@ -86,16 +88,18 @@ function SavedProviderCard({ provider, onRemove }: { provider: SavedProviderDto;
 
       <div className="provider-card-actions">
         <div className="provider-card-buttons">
-          {provider.phone && (
-            <a className="ghost-button" href={telHref(provider.phone)}>
+          {location?.phone && (
+            <a className="ghost-button" href={telHref(location.phone)}>
               <PhoneIcon width={14} height={14} />
               Call
             </a>
           )}
-          <a className="ghost-button" href={directionsUrl(provider)} target="_blank" rel="noopener noreferrer">
-            <DirectionsIcon width={14} height={14} />
-            Directions
-          </a>
+          {location && (
+            <a className="ghost-button" href={directionsUrl(location)} target="_blank" rel="noopener noreferrer">
+              <DirectionsIcon width={14} height={14} />
+              Directions
+            </a>
+          )}
           <Link className="ghost-button" to={`/providers/${provider.providerId}`}>
             View details
           </Link>

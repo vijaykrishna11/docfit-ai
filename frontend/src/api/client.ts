@@ -134,8 +134,16 @@ export function fetchPayerPlans(payerId: number): Promise<InsurancePlanDto[]> {
   return request<InsurancePlanDto[]>(`/api/insurance/payers/${payerId}/plans`)
 }
 
-export function fetchProviderNetworkEvidence(providerId: number, planId: number): Promise<NetworkEvidenceDetailDto> {
-  return request<NetworkEvidenceDetailDto>(`/api/providers/${providerId}/network-evidence?planId=${planId}`)
+export function fetchProviderNetworkEvidence(
+  providerId: number,
+  planId: number,
+  locationId?: number,
+): Promise<NetworkEvidenceDetailDto> {
+  const params = new URLSearchParams({ planId: String(planId) })
+  if (locationId != null) {
+    params.set('locationId', String(locationId))
+  }
+  return request<NetworkEvidenceDetailDto>(`/api/providers/${providerId}/network-evidence?${params.toString()}`)
 }
 
 export interface ProviderSearchParams {

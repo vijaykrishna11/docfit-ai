@@ -62,20 +62,33 @@ export interface NetworkEvidenceDetailDto {
   limitations: string[]
 }
 
-export interface ProviderSearchResultDto {
+export type ProviderEntityTypeValue = 'INDIVIDUAL' | 'ORGANIZATION'
+
+/** {@code coordinatePrecision} is truthful -- ZIP_CENTROID means an approximate ZIP-code lookup, never a real address geocode. */
+export interface ProviderLocationDto {
   id: number
-  npiNumber: string
-  firstName: string | null
-  lastName: string | null
-  organizationName: string | null
-  phone: string | null
   addressLine1: string
   addressLine2: string | null
   city: string
   stateCode: string
   postalCode: string
+  phone: string | null
+  latitude: number | null
+  longitude: number | null
+  coordinatePrecision: string
+}
+
+/** One provider per result, attached to its single nearest qualifying practice location (never repeated per office). */
+export interface ProviderSearchResultDto {
+  id: number
+  npiNumber: string
+  entityType: ProviderEntityTypeValue
+  firstName: string | null
+  lastName: string | null
+  organizationName: string | null
   taxonomyCode: string
   specialtyDisplayName: string
+  location: ProviderLocationDto
   distanceMiles: number
   networkEvidence: NetworkEvidenceSummaryDto | null
 }
@@ -97,18 +110,16 @@ export interface ProviderTaxonomyDto {
   primaryTaxonomy: boolean
 }
 
+/** {@code location} is the selected/nearest location; {@code otherLocations} holds the provider's remaining offices, if any. */
 export interface ProviderDetailDto {
   id: number
   npiNumber: string
+  entityType: ProviderEntityTypeValue
   firstName: string | null
   lastName: string | null
   organizationName: string | null
-  phone: string | null
-  addressLine1: string
-  addressLine2: string | null
-  city: string
-  stateCode: string
-  postalCode: string
+  location: ProviderLocationDto | null
+  otherLocations: ProviderLocationDto[]
   distanceMiles: number | null
   taxonomies: ProviderTaxonomyDto[]
   importedAt: string | null
@@ -117,6 +128,7 @@ export interface ProviderDetailDto {
 export interface ProviderNameSearchResultDto {
   id: number
   npiNumber: string
+  entityType: ProviderEntityTypeValue
   firstName: string | null
   lastName: string | null
   organizationName: string | null
@@ -152,15 +164,11 @@ export interface SavedProviderDto {
   savedAt: string
   providerId: number
   npiNumber: string
+  entityType: ProviderEntityTypeValue
   firstName: string | null
   lastName: string | null
   organizationName: string | null
-  phone: string | null
-  addressLine1: string
-  addressLine2: string | null
-  city: string
-  stateCode: string
-  postalCode: string
+  location: ProviderLocationDto | null
 }
 
 export interface SavedSearchDto {
