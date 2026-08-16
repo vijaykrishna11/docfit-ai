@@ -42,9 +42,10 @@ public class ProviderController {
             @RequestParam(defaultValue = "25") double radius,
             @RequestParam(defaultValue = "distance") String sort,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Long planId) {
         return providerSearchService.search(
-                new ProviderSearchQuery(specialty, zip, location, lat, lng, radius, sort, page, size));
+                new ProviderSearchQuery(specialty, zip, location, lat, lng, radius, sort, page, size, planId));
     }
 
     @GetMapping("/{id}")

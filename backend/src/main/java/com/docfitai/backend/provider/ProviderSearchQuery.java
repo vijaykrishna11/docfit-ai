@@ -13,5 +13,6 @@ public record ProviderSearchQuery(
         double radiusMiles,
         String sort,
         int page,
-        int size) {
+        int size,
+        Long planId) {
 }

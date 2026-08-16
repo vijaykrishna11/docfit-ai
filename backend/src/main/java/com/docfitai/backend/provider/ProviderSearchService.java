@@ -1,5 +1,7 @@
 package com.docfitai.backend.provider;
 
+import com.docfitai.backend.insurance.dto.NetworkEvidenceSummaryDto;
+import com.docfitai.backend.insurance.evidence.NetworkEvidenceService;
 import com.docfitai.backend.provider.dto.ProviderSearchResponseDto;
 import com.docfitai.backend.provider.dto.ProviderSearchResultDto;
 import com.docfitai.backend.reference.Specialty;
@@ -40,14 +42,17 @@ public class ProviderSearchService {
     private final SpecialtyRepository specialtyRepository;
     private final ZipGeographyRepository zipGeographyRepository;
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final NetworkEvidenceService networkEvidenceService;
 
     public ProviderSearchService(
             SpecialtyRepository specialtyRepository,
             ZipGeographyRepository zipGeographyRepository,
-            NamedParameterJdbcTemplate jdbcTemplate) {
+            NamedParameterJdbcTemplate jdbcTemplate,
+            NetworkEvidenceService networkEvidenceService) {
         this.specialtyRepository = specialtyRepository;
         this.zipGeographyRepository = zipGeographyRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.networkEvidenceService = networkEvidenceService;
     }
 
     public ProviderSearchResponseDto search(ProviderSearchQuery query) {
@@ -139,8 +144,25 @@ public class ProviderSearchService {
         int fromIndex = Math.min(safePage * safeSize, totalElements);
         int toIndex = Math.min(fromIndex + safeSize, totalElements);
         List<ProviderSearchResultDto> pageResults = withinRadius.subList(fromIndex, toIndex);
+        pageResults = attachNetworkEvidence(pageResults, query.planId());
 
         return new ProviderSearchResponseDto(pageResults, safePage, safeSize, totalElements, totalPages, origin.label());
+    }
+
+    /**
+     * Batched, single-query evidence lookup for the page actually being returned -- never one
+     * lookup per provider (CLAUDE.md 89-91). Omitting {@code planId} leaves every result's
+     * networkEvidence field null rather than a fabricated status.
+     */
+    private List<ProviderSearchResultDto> attachNetworkEvidence(List<ProviderSearchResultDto> pageResults, Long planId) {
+        if (planId == null || pageResults.isEmpty()) {
+            return pageResults;
+        }
+        List<Long> providerIds = pageResults.stream().map(ProviderSearchResultDto::id).toList();
+        Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider = networkEvidenceService.summarizeForProviders(providerIds, planId);
+        return pageResults.stream()
+                .map(result -> result.withNetworkEvidence(evidenceByProvider.get(result.id())))
+                .toList();
     }
 
     private static String displayName(ProviderSearchResultDto dto) {

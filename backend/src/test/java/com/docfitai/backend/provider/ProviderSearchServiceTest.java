@@ -42,7 +42,7 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(WRONG_SPECIALTY_NPI, "207N00000X", true);
 
         ProviderSearchResponseDto response = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20, null));
 
         Map<String, ProviderSearchResultDto> byNpi =
                 response.results().stream().collect(toMap(ProviderSearchResultDto::npiNumber, r -> r));
@@ -71,7 +71,7 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(farButWithinDefault, "207RC0000X", true);
 
         ProviderSearchResponseDto narrow = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 2, "distance", 0, 20));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 2, "distance", 0, 20, null));
 
         assertThat(narrow.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
         assertThat(narrow.results())
@@ -86,12 +86,12 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(near, "207RC0000X", true);
 
         ProviderSearchResponseDto byLatLng = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", null, null, 33.770000, -118.191000, 25, "distance", 0, 20));
+                new ProviderSearchQuery("CARDIOLOGY", null, null, 33.770000, -118.191000, 25, "distance", 0, 20, null));
         assertThat(byLatLng.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
         assertThat(byLatLng.originLabel()).isNull();
 
         ProviderSearchResponseDto byCity = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", null, "Long Beach", null, null, 25, "distance", 0, 20));
+                new ProviderSearchQuery("CARDIOLOGY", null, "Long Beach", null, null, 25, "distance", 0, 20, null));
         assertThat(byCity.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
         assertThat(byCity.originLabel()).isEqualTo("Long Beach, CA");
     }
@@ -108,7 +108,7 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(amyNear, "207RC0000X", true);
 
         ProviderSearchResponseDto response = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "name", 0, 200));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "name", 0, 200, null));
 
         List<String> npis =
                 response.results().stream().map(ProviderSearchResultDto::npiNumber).toList();
@@ -128,7 +128,7 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(amy, "207RC0000X", true);
 
         ProviderSearchResponseDto response = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "name-desc", 0, 200));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "name-desc", 0, 200, null));
 
         List<String> npis =
                 response.results().stream().map(ProviderSearchResultDto::npiNumber).toList();
@@ -144,18 +144,18 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertTaxonomy(midRange, "207RC0000X", true);
 
         ProviderSearchResponseDto at25 = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 25, "distance", 0, 20, null));
         assertThat(at25.results()).extracting(ProviderSearchResultDto::npiNumber).doesNotContain(midRange);
 
         ProviderSearchResponseDto at50 = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 50, "distance", 0, 20));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 50, "distance", 0, 20, null));
         assertThat(at50.results()).extracting(ProviderSearchResultDto::npiNumber).contains(midRange);
     }
 
     @Test
     void unknownLocationIsRejectedWithBadRequest() {
         assertThatThrownBy(() -> providerSearchService.search(
-                        new ProviderSearchQuery("CARDIOLOGY", null, "Nowhereville", null, null, 25, "distance", 0, 20)))
+                        new ProviderSearchQuery("CARDIOLOGY", null, "Nowhereville", null, null, 25, "distance", 0, 20, null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(400);
