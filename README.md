@@ -63,6 +63,26 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
 - "Why this result?" on every provider card and detail page: a factual, expandable explanation
   (matched specialty, approximate distance, NPPES/NPI data source, insurance-not-verified) —
   never a score, rank, or "best match" claim
+- **Interactive discovery map**: Leaflet + OpenStreetMap (no paid API/key), lazy-loaded so
+  non-map-users pay nothing for it. Precision-aware markers (a solid pin for a real geocode, a
+  hollow/dashed one for a ZIP/city-centroid approximation), desktop list/map split, mobile
+  List/Map toggle. See `docs/map-and-location-accuracy.md`.
+- **Practical-fit filters**: provider type, phone-availability, location precision, network
+  evidence found, multiple locations — all optional, additive, applied server-side without N+1
+  queries. See `API.md`.
+- **Location switcher**: a multi-location provider's detail page lets you switch which office is
+  shown; address/phone/directions/distance update instantly (no extra request — every office's
+  data already arrived together), and network evidence re-fetches for the newly selected office.
+- **Shortlists**: named collections on top of the existing saved-providers list (e.g. "Cardiology
+  options", "Near campus") — fully additive, ownership-scoped, IDOR-tested. See
+  `docs/shortlists.md`.
+- **Share selected providers**: a public `/share/providers?ids=...` link for up to 5 providers —
+  no account required to view, and the link never reveals which account or shortlist it came from.
+- **Directory-data correction reports**: "Report incorrect information" on any provider detail
+  page — anonymous by default, rate-limited, categorized (wrong address/phone/etc.), never
+  auto-applied to provider data. See `docs/directory-corrections.md`.
+- **Recent searches**: kept in `sessionStorage` only (mirrors Recently Viewed), cleared by the
+  user or when the tab closes, never sent to the server.
 
 ## What it deliberately does not do
 
@@ -243,10 +263,16 @@ Reasonable future directions, not yet built:
 - Provider availability integration, only where a reliable data source exists
 - Password reset (deliberately not implemented yet — no "Forgot password" link is shown rather
   than promising a flow that doesn't work)
-- A real map view, if one can be built without implying more location precision than the demo
-  ZIP-centroid geography actually has
-- A SQL bounding-box distance pre-filter (and, only if later measurements justify it, PostGIS) for
-  California-scale search — see `docs/geospatial-scaling.md`
+- PostGIS (or Postgres's built-in `cube`/`earthdistance`), only if a future measurement against
+  real production-scale data shows the current SQL bounding-box pre-filter isn't enough — see
+  `docs/geospatial-scaling.md`
+- Address-level geocoding (the map's precise-vs-approximate marker styling already exists and
+  would activate automatically the moment `coordinatePrecision` data includes `EXACT`/
+  `ADDRESS_GEOCODE` rows — see `docs/map-and-location-accuracy.md`)
+- A dedicated shortlist-membership-check endpoint if per-user shortlist counts grow large enough
+  to matter — see `docs/shortlists.md`
+- Natural-language administrative search parsing, and other safely-scoped AI ideas — research
+  only so far, see `docs/ai-navigation-opportunities.md`
 - Dropping the now-unused legacy `provider` address/phone/coordinate columns once Stage A of the
   multi-location migration has run in practice for a while — see `docs/provider-data-platform.md`,
   "Migration strategy"

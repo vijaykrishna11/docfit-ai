@@ -168,6 +168,15 @@ Searches providers by specialty and location.
 | `page` | no | `0` | Zero-based page index |
 | `size` | no | `20` | Page size |
 | `planId` | no | -- | An id from `/api/insurance/payers/{id}/plans`. See "Insurance network intelligence" below. |
+| `providerType` | no | -- | `INDIVIDUAL` or `ORGANIZATION`. 400 for any other value. |
+| `hasPhone` | no | -- | `true` to only include results whose shown location has a phone number on file. |
+| `preciseLocationOnly` | no | -- | `true` to exclude ZIP/city-centroid approximations (`coordinatePrecision` not `EXACT`/`ADDRESS_GEOCODE`). |
+| `networkEvidenceFound` | no | -- | `true` to only include results with `EVIDENCE_FOUND` status at the shown location. **Requires `planId`** -- 400 without one. |
+| `multipleLocations` | no | -- | `true` to only include providers with more than one practice location. |
+
+All five filters above are additive and off by default -- omitting them changes nothing about the
+existing search behavior. See `docs/care-discovery-v3.md` ("Practical-fit filters") for how each
+is implemented without introducing N+1 queries.
 
 **Example**: `GET /api/providers/search?specialty=CARDIOLOGY&location=90802&radius=25&sort=distance&page=0&size=20`
 ```json
@@ -192,10 +201,12 @@ Searches providers by specialty and location.
         "phone": "562-595-1911",
         "latitude": 33.806,
         "longitude": -118.182,
-        "coordinatePrecision": "ZIP_CENTROID"
+        "coordinatePrecision": "ZIP_CENTROID",
+        "distanceMiles": 2.5
       },
       "distanceMiles": 2.5,
-      "networkEvidence": null
+      "networkEvidence": null,
+      "locationCount": 1
     }
   ],
   "page": 0,
@@ -210,7 +221,10 @@ is performed). Every provider appears **once** per search, attached to its singl
 qualifying practice location — a provider with multiple real offices (this is common; see
 `docs/provider-ingestion.md`) is never repeated per office. `location.coordinatePrecision` is
 truthful: DocFit AI's current data is always `ZIP_CENTROID` (a ZIP-centroid lookup), never
-`EXACT`.
+`EXACT`. `locationCount` is the provider's total practice-location count, not just the one shown
+here -- used to render a "N practice locations" indicator. `location.distanceMiles` mirrors the
+top-level `distanceMiles` for this result's shown location (kept for map-marker convenience); on
+the detail endpoint below, every location carries its own independently, not just the selected one.
 
 **400 Bad Request** when: `specialty` is unknown, no location is provided, or `zip`/`location`
 doesn't resolve to a known demo-area location.
@@ -245,7 +259,8 @@ match used in search results) and all of its known practice locations.
     "phone": "562-595-1911",
     "latitude": 33.806,
     "longitude": -118.182,
-    "coordinatePrecision": "ZIP_CENTROID"
+    "coordinatePrecision": "ZIP_CENTROID",
+    "distanceMiles": 2.5
   },
   "otherLocations": [],
   "distanceMiles": 2.5,
@@ -263,7 +278,11 @@ match used in search results) and all of its known practice locations.
 `otherLocations` holds every other practice location DocFit AI knows about for this provider
 (never duplicating `location`) — real, common example from this repo's own demo dataset: an
 organization provider with **41** real NPPES-reported practice locations returns 1 in `location`
-(the nearest to the search origin) and 40 in `otherLocations`.
+(the nearest to the search origin) and 40 in `otherLocations`. When an origin is provided, **every**
+location -- both `location` and each entry in `otherLocations` -- carries its own `distanceMiles`,
+not just the selected one. This is what powers the frontend's location switcher (CLAUDE.md
+"Location Switcher"): switching which office is shown is pure client-side state, since every
+office's address/phone/precision/distance already arrived in this one response.
 
 **404 Not Found** when the provider ID doesn't exist.
 
@@ -389,3 +408,52 @@ response to an explicit user action.
 - `PATCH /api/saved-searches/{id}` -- rename (`{ "name": "..." }`). **404** if not found or not
   owned by the caller (existence is not confirmed to non-owners).
 - `DELETE /api/saved-searches/{id}` -- remove. Same 404 semantics.
+
+---
+
+## Shortlists
+
+All endpoints require `Authorization: Bearer <accessToken>` and are scoped to the authenticated
+user, same ownership model as saved providers/searches (dedicated IDOR tests:
+`ShortlistAuthorizationTest`). A shortlist is a named grouping a provider can optionally belong
+to, in addition to (not instead of) the default saved-providers list. Names are treated as private
+user data and never exposed outside the owner's own authenticated requests.
+
+- `GET /api/account/shortlists` -- list, most-recently-created first. Each entry includes
+  `providerCount`, not the provider list itself.
+- `POST /api/account/shortlists` -- `{ "name": "Cardiology options" }`. **201**, returns the
+  created shortlist (`providerCount: 0`). Name is required, trimmed, max 100 characters.
+- `GET /api/account/shortlists/{id}` -- full detail including every member provider (same nested
+  location shape as saved providers). **404** if not found or not owned.
+- `PATCH /api/account/shortlists/{id}` -- rename (`{ "name": "..." }`). Same 404 semantics.
+- `DELETE /api/account/shortlists/{id}` -- deletes the shortlist and its membership rows (cascades
+  at the DB level); never touches the provider records themselves.
+- `POST /api/account/shortlists/{id}/providers/{providerId}` -- add (idempotent; **204**). **404**
+  if the shortlist isn't owned by the caller, or if the provider doesn't exist.
+- `DELETE /api/account/shortlists/{id}/providers/{providerId}` -- remove (**204**, idempotent).
+
+---
+
+## Directory-data correction reports
+
+`POST /api/providers/{providerId}/reports` -- **publicly accessible, no authentication required**
+(a deliberate product decision -- see `docs/directory-corrections.md` "Why anonymous submission").
+Rate-limited by client IP (`docfitai.reports.rate-limit.*`, default 5 per 10 minutes, independent
+of the auth rate limiter). If the caller happens to be signed in, the report is tagged with their
+user id for context; this is never required.
+
+```json
+{ "reportType": "WRONG_PHONE_NUMBER", "providerLocationId": 57, "comment": "optional, max 1000 chars" }
+```
+
+`reportType` must be one of: `WRONG_ADDRESS`, `WRONG_PHONE_NUMBER`, `PROVIDER_NOT_AT_LOCATION`,
+`NAME_APPEARS_INCORRECT`, `SPECIALTY_APPEARS_INCORRECT`, `DUPLICATE_PROVIDER_OR_LOCATION`,
+`INSURANCE_INFO_APPEARS_INCORRECT`, `OTHER`. Any other value is a **400** (rejected by JSON
+deserialization before the request handler even runs). `providerLocationId` is optional; if
+supplied, it must actually belong to `providerId` (**400** otherwise). **404** if the provider
+doesn't exist. **429** if the rate limit is exceeded.
+
+**201**, returns only `{ "id": <reportId> }`. There is no endpoint to list or read reports back --
+they are operator review signals only (queried directly against the database; see
+`docs/directory-corrections.md`), and submitting one never alters the provider/location record
+it's about.
