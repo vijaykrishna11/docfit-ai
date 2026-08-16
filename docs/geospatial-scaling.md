@@ -6,6 +6,12 @@ row returned by a single SQL join, then filtered/sorted in memory. This document
 that's fine today, what the real bottleneck will be as the dataset grows, and what to change
 first -- without introducing PostGIS before it's actually justified (CLAUDE.md 35).
 
+**Update (release-candidate-hardening phase):** the bounding-box pre-filter this document
+originally recommended as "the next real step" has been implemented (`ProviderSearchService`
+MATCH_QUERY, migration V10). See "Bounding-box pre-filter: implemented and measured" below for
+what it does and does not fix, backed by real `EXPLAIN ANALYZE` evidence at both current and
+simulated scale.
+
 ## Current measured behavior
 
 Against the real dataset produced by this phase's live NPPES import (492 providers, 689 practice
@@ -43,23 +49,51 @@ into the tens or hundreds of thousands (LA County or California scale, CLAUDE.md
    larger dataset needs the database to narrow candidates by rough geographic proximity *before*
    Java computes exact Haversine distance, not after.
 
-## What to change first (before PostGIS)
+## Bounding-box pre-filter: implemented and measured
 
-A `provider_location(state_code)` / `provider_location(postal_code)` filter is already available
-and already used for radius pre-filtering in a de facto way (`ProviderSearchService` narrows by
-taxonomy first, and DocFit's data is currently geographically clustered around a handful of demo
-ZIPs, so this hasn't mattered yet). The next real step, before any new extension:
+`ProviderSearchService.search` now computes a superset lat/lng bounding box from the requested
+origin and radius and adds it to `MATCH_QUERY`'s `WHERE` clause
+(`pl.latitude BETWEEN :minLat AND :maxLat`, same for longitude), backed by a new B-tree index
+(`V10__add_provider_location_geo_index.sql`, `provider_location(latitude, longitude)`). The exact
+circle is still enforced afterward via the existing Haversine filter in Java -- the box only has to
+be a superset, so results are unchanged; only the candidate set fetched from the database shrinks.
 
-1. **Add a lat/lng bounding-box pre-filter in SQL.** Given a search origin and radius, compute a
-   simple bounding box (`latitude BETWEEN ... AND ...`, `longitude BETWEEN ... AND ...`) and add
-   it to the `WHERE` clause alongside the taxonomy filter, with a plain B-tree index on
-   `provider_location(latitude, longitude)`. This is cheap, requires no new Postgres extension,
-   and eliminates the vast majority of geographically-irrelevant rows before they ever reach Java
-   — the same idea PostGIS's `ST_DWithin` uses, just without the spatial index machinery.
-2. **Consider Postgres's built-in `cube`/`earthdistance` extension** (ships with core Postgres,
-   no separate install) if bounding-box + Haversine-in-Java ever shows up as a measured
-   bottleneck. It adds a `ll_to_earth`/`earth_box` GiST index for genuine radius queries in SQL,
-   without the operational weight of PostGIS.
+**What this fixes, measured:** the original concern was a common specialty pulling every matching
+row *nationwide* into Java regardless of the requested radius. Verified directly with a 20,000-row
+synthetic simulation (uniformly distributed across the contiguous US, all sharing one taxonomy
+code, run inside a transaction and rolled back -- never committed to any database):
+
+```
+Old query (no geographic bound at all): 20,011 rows returned to the application layer
+New query (bounding box added):            14 rows returned to the application layer
+```
+
+That's the fix working as intended -- the application no longer holds, Haversine-computes, and
+sorts a nationwide result set for a common specialty; it only ever sees candidates already inside
+the requested area.
+
+**What this does *not* fully fix, measured honestly:** database-side execution time for that same
+worst-case (one taxonomy code shared by every row) barely moved --  67ms unbounded vs 61ms bounded.
+`EXPLAIN ANALYZE` shows why: with a taxonomy code this common, Postgres's planner still drives the
+join from `provider_taxonomy` (20,011 matches) and probes `provider_location` once per match via
+the existing `provider_id` index, applying the new lat/lng bounds as a post-lookup `Filter` rather
+than restructuring the plan to scan the new geo index first. The new index measurably helps the
+*payload size* problem; it does not by itself change the join order for a pathologically common
+taxonomy code. At real NPPES data (no single taxonomy code is anywhere near "every provider
+nationwide") this is expected to matter less than the synthetic worst case shows -- but it is not
+proven to disappear, so it's flagged here rather than assumed away.
+
+At the current real dataset (492 providers), this is moot either way: `EXPLAIN ANALYZE` shows
+Postgres correctly prefers a sequential scan over `provider` regardless of the new index (see
+"Current measured behavior" above) -- there simply isn't enough data yet for either plan to matter.
+
+**Next step if this becomes a measured problem at real scale** (not preemptive): Postgres's
+built-in `cube`/`earthdistance` extension (ships with core Postgres, no separate install) adds a
+`ll_to_earth`/`earth_box` GiST index that supports genuine radius queries and gives the planner a
+real reason to drive the join from geography first. Consider it if a future EXPLAIN ANALYZE against
+real production-scale data (not this synthetic worst case) shows the plain B-tree bounding box
+insufficient -- not before, per CLAUDE.md 35's "don't introduce PostGIS before it's justified," which
+applies equally to `cube`/`earthdistance` as a smaller but still real operational addition.
 
 ## When PostGIS actually becomes worth it
 
@@ -71,10 +105,9 @@ column type, migration of existing lat/lng data into `geography(Point,4326)`), s
 adopted when a measured query — not a guess — shows the bounding-box approach isn't enough, not
 preemptively. Nothing in this phase's measured numbers justifies it yet.
 
-## Indexes added this phase, and why
+## Indexes added, and why
 
-`provider_location(provider_id)`, `provider_location(postal_code)` — both support real queries
-this phase's services run (fetching a provider's locations; ZIP-based reference lookups). No
-lat/lng index was added yet, per the above — there's no bounding-box query to support it until
-the next phase implements one, and adding an index nothing queries yet would be exactly the kind
-of unjustified index CLAUDE.md 34/91 warns against.
+`provider_location(provider_id)`, `provider_location(postal_code)` -- support real queries the
+provider-data-platform phase's services run (fetching a provider's locations; ZIP-based reference
+lookups). `provider_location(latitude, longitude)` -- added this phase (V10) to support the new
+bounding-box pre-filter above; see that section for measured impact and its current limits.
