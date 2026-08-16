@@ -30,8 +30,13 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
 - Shareable/bookmarkable search URLs (specialty, location, radius, sort, and page all live in
   the URL; browser Back/Forward and page refresh reproduce the same search); a "Share search"
   button copies the link
+- **Multi-location providers**: a provider can have multiple real practice locations (individual
+  and organization/NPI-2 providers both supported). Search returns each provider once, attached
+  to its nearest qualifying office; provider detail shows that office plus every other known
+  location, each with its own phone/Call/Directions — never merged or duplicated. See
+  `docs/provider-data-platform.md`.
 - Provider detail page (`/providers/:id`) with full taxonomy information, distance from the
-  active search, and working Call / Get Directions actions
+  active search, and working Call / Get Directions actions per location
 - Provider comparison (`/compare`) for up to 3 providers, side by side, factual fields only —
   no ratings, quality claims, or clinical recommendations
 - Insurance network evidence: an optional payer/plan selector shows sourced, dated **network
@@ -95,26 +100,33 @@ flowchart LR
     end
     subgraph Server
         API[Spring Boot REST API]
-        DB[(PostgreSQL)]
+        DB[(PostgreSQL<br/>provider + provider_location)]
     end
-    NPPES[NPPES / NPI Registry]
+    NPPES[NPPES / NPI Registry<br/>individual + organization]
+    CSV[Operator CSV file<br/>off by default]
 
     UI -- REST/JSON --> API
     API -- Spring Data JPA / JDBC --> DB
     NPPES -- one-time import --> DB
+    CSV -. optional import .-> DB
 ```
 
 The backend follows Controller → Service → Repository, with DTOs at the API boundary (JPA
 entities are never returned directly). Reference data (specialties, NUCC taxonomy codes,
-insurance carriers, ZIP geography) and provider data (imported from NPPES) live in separate
-Flyway-managed table groups.
+insurance carriers, ZIP geography) and provider data (imported from NPPES/CSV) live in separate
+Flyway-managed table groups. Provider **identity** (`provider`) and **practice locations**
+(`provider_location`, zero-to-many per provider) are modeled separately — see
+`docs/provider-data-platform.md`.
 
 ## Data
 
-- **Providers**: imported once from the public [NPI Registry / NPPES API](https://npiregistry.cms.hhs.gov/),
-  filtered to individual (NPI-1) providers whose taxonomy matches one of DocFit AI's supported
-  specialties. The import is a manual, one-time `CommandLineRunner` gated behind a Spring
-  profile — not a scheduled job.
+- **Providers**: imported from the public [NPI Registry / NPPES API](https://npiregistry.cms.hhs.gov/),
+  covering both individual (NPI-1) and organization (NPI-2) providers whose taxonomy matches one
+  of DocFit AI's supported specialties, including every real practice location NPPES reports per
+  provider (its primary location plus any additional offices in NPPES's own `practiceLocations`
+  field). A bounded, off-by-default CSV importer also exists for operator-supplied data — see
+  `docs/provider-ingestion.md`. Both importers are idempotent (safe to re-run) and are manual,
+  explicitly-triggered runs — never a scheduled job, never triggered by a request.
 - **Geography**: a small, intentionally limited demo set of ZIP codes covering Long Beach and
   nearby Los Angeles County (90802, 90803, 90806, 90815, 90712, 90755), sourced from U.S. Census
   ZCTA reference data. Location search and suggestions only work within this demo area.
@@ -174,6 +186,8 @@ via environment variables for anything beyond local dev:
 | `AUTH_RATE_LIMIT_MAX_ATTEMPTS` / `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `10` / `5` | In-memory, per-IP+email sliding-window limiter on register/login — single-instance only, not distributed (documented limitation, not a bug) |
 | `NETWORK_EVIDENCE_FRESH_DAYS` / `NETWORK_EVIDENCE_AGING_DAYS` | `30` / `60` | Freshness band thresholds for network evidence display — see `docs/insurance-network-architecture.md` |
 | `FHIR_PLAN_NET_BASE_URL` | unset | Only set this to point the real `FhirPlanNetConnector` at a specific, vetted payer's Da Vinci Plan-Net endpoint — unset by default, so no live payer source is used out of the box |
+| `DOCFIT_SYNTHETIC_INSURANCE_ENABLED` | `false` | Must be explicitly set `true` to seed any synthetic demo network evidence — off everywhere (dev, prod, tests) by default. See `docs/provider-data-platform.md`, "Production safety." |
+| `DOCFIT_PROVIDER_CSV_IMPORT_ENABLED` / `DOCFIT_PROVIDER_CSV_SOURCE_DIR` / `DOCFIT_PROVIDER_CSV_BATCH_SIZE` | `false` / unset / `200` | Bounded CSV provider importer — off by default; the source directory is server-side configuration only, never a request path. See `docs/provider-ingestion.md`. |
 
 > **Windows PowerShell note:** if `npm` is blocked by PowerShell's script-execution policy
 > (`npm.ps1 cannot be loaded...`), use `npm.cmd` instead (e.g. `npm.cmd install`,
@@ -193,6 +207,21 @@ npm run lint
 npm run test
 npm run build
 ```
+
+**End-to-end** (Playwright, needs a real running backend + Postgres + frontend dev server — see
+`docs/e2e-testing.md` for exact setup):
+```
+cd frontend
+npx playwright install chromium   # one time
+npm run e2e
+```
+
+## Docker
+
+`backend/Dockerfile` builds a production-shaped image (multi-stage: Maven/JDK 21 builder → slim
+JRE runtime, non-root user). All configuration comes from environment variables at container run
+time — no secret is baked into the image. Not part of this repo's local dev flow (which runs the
+backend directly via `./mvnw spring-boot:run`) and not deployed anywhere by this project.
 
 ## Screenshots
 
@@ -216,6 +245,13 @@ Reasonable future directions, not yet built:
   than promising a flow that doesn't work)
 - A real map view, if one can be built without implying more location precision than the demo
   ZIP-centroid geography actually has
+- A SQL bounding-box distance pre-filter (and, only if later measurements justify it, PostGIS) for
+  California-scale search — see `docs/geospatial-scaling.md`
+- Dropping the now-unused legacy `provider` address/phone/coordinate columns once Stage A of the
+  multi-location migration has run in practice for a while — see `docs/provider-data-platform.md`,
+  "Migration strategy"
+- CI wiring for the new Playwright E2E suite (needs a Postgres + backend + frontend triad
+  provisioned in CI — see `docs/e2e-testing.md`)
 
 ## Healthcare boundary
 

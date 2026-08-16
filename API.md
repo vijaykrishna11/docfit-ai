@@ -89,6 +89,7 @@ Full network evidence detail for one provider/plan pair.
 | Param | Required | Description |
 |---|---|---|
 | `planId` | yes | An id from `/api/insurance/payers/{id}/plans` |
+| `locationId` | no | A specific `provider_location` id (from a search result or provider detail's `location.id`). Evidence bound to a *different* location is never applied when this is omitted or doesn't match — see `docs/provider-data-platform.md` ("Network evidence + locations"). |
 
 **404** if the provider doesn't exist. **400** if `planId` is missing or unknown.
 
@@ -175,18 +176,26 @@ Searches providers by specialty and location.
     {
       "id": 57,
       "npiNumber": "1538111547",
+      "entityType": "INDIVIDUAL",
       "firstName": "PARVATANENI",
       "lastName": "ARUN",
       "organizationName": null,
-      "phone": "562-595-1911",
-      "addressLine1": "2776 PACIFIC AVE",
-      "addressLine2": null,
-      "city": "LONG BEACH",
-      "stateCode": "CA",
-      "postalCode": "90806",
       "taxonomyCode": "207RC0000X",
       "specialtyDisplayName": "Cardiovascular Disease Specialist",
-      "distanceMiles": 2.5
+      "location": {
+        "id": 57,
+        "addressLine1": "2776 PACIFIC AVE",
+        "addressLine2": null,
+        "city": "LONG BEACH",
+        "stateCode": "CA",
+        "postalCode": "90806",
+        "phone": "562-595-1911",
+        "latitude": 33.806,
+        "longitude": -118.182,
+        "coordinatePrecision": "ZIP_CENTROID"
+      },
+      "distanceMiles": 2.5,
+      "networkEvidence": null
     }
   ],
   "page": 0,
@@ -197,7 +206,11 @@ Searches providers by specialty and location.
 }
 ```
 `originLabel` is `null` when the search origin came from raw `lat`/`lng` (no reverse geocoding
-is performed).
+is performed). Every provider appears **once** per search, attached to its single nearest
+qualifying practice location — a provider with multiple real offices (this is common; see
+`docs/provider-ingestion.md`) is never repeated per office. `location.coordinatePrecision` is
+truthful: DocFit AI's current data is always `ZIP_CENTROID` (a ZIP-centroid lookup), never
+`EXACT`.
 
 **400 Bad Request** when: `specialty` is unknown, no location is provided, or `zip`/`location`
 doesn't resolve to a known demo-area location.
@@ -207,26 +220,34 @@ doesn't resolve to a known demo-area location.
 ## `GET /api/providers/{id}`
 
 Full detail for a single provider, including all of its taxonomy rows (not just the best
-match used in search results).
+match used in search results) and all of its known practice locations.
 
 | Param | Required | Description |
 |---|---|---|
-| `zip`, `location`, or `lat`+`lng` | no | If provided, `distanceMiles` is computed from this origin (e.g. to show "distance from your search" on the detail page); otherwise `distanceMiles` is `null`. |
+| `zip`, `location`, or `lat`+`lng` | no | If provided, `distanceMiles` is computed to the nearest location from this origin, and that location is returned as `location` (otherwise `location` is the provider's primary office and `distanceMiles` is `null`). |
 
 **Example**: `GET /api/providers/57?location=90802`
 ```json
 {
   "id": 57,
   "npiNumber": "1538111547",
+  "entityType": "INDIVIDUAL",
   "firstName": "PARVATANENI",
   "lastName": "ARUN",
   "organizationName": null,
-  "phone": "562-595-1911",
-  "addressLine1": "2776 PACIFIC AVE",
-  "addressLine2": null,
-  "city": "LONG BEACH",
-  "stateCode": "CA",
-  "postalCode": "90806",
+  "location": {
+    "id": 57,
+    "addressLine1": "2776 PACIFIC AVE",
+    "addressLine2": null,
+    "city": "LONG BEACH",
+    "stateCode": "CA",
+    "postalCode": "90806",
+    "phone": "562-595-1911",
+    "latitude": 33.806,
+    "longitude": -118.182,
+    "coordinatePrecision": "ZIP_CENTROID"
+  },
+  "otherLocations": [],
   "distanceMiles": 2.5,
   "taxonomies": [
     {
@@ -239,6 +260,10 @@ match used in search results).
   ]
 }
 ```
+`otherLocations` holds every other practice location DocFit AI knows about for this provider
+(never duplicating `location`) — real, common example from this repo's own demo dataset: an
+organization provider with **41** real NPPES-reported practice locations returns 1 in `location`
+(the nearest to the search origin) and 40 in `otherLocations`.
 
 **404 Not Found** when the provider ID doesn't exist.
 
@@ -265,6 +290,7 @@ Returns at most 10 matches, each provider's best (primary) taxonomy only.
   {
     "id": 57,
     "npiNumber": "1538111547",
+    "entityType": "INDIVIDUAL",
     "firstName": "PARVATANENI",
     "lastName": "ARUN",
     "organizationName": null,
@@ -339,7 +365,9 @@ All endpoints require `Authorization: Bearer <accessToken>` and are scoped to th
 user -- one user can never see or modify another user's saved providers (verified by dedicated
 IDOR tests).
 
-- `GET /api/saved-providers` -- list, most-recently-saved first.
+- `GET /api/saved-providers` -- list, most-recently-saved first. Each entry's `location` is the
+  provider's primary practice location (nested `ProviderLocationDto`, same shape as search/detail)
+  — there's no search origin here to pick a "nearest" one.
 - `POST /api/saved-providers/{providerId}` -- save (idempotent; **204**). **404** if the provider
   doesn't exist.
 - `DELETE /api/saved-providers/{providerId}` -- remove (**204**, idempotent).
