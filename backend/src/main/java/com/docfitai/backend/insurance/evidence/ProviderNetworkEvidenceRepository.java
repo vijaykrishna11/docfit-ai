@@ -19,8 +19,10 @@ public interface ProviderNetworkEvidenceRepository extends JpaRepository<Provide
             @Param("providerIds") List<Long> providerIds, @Param("networkIds") List<Long> networkIds);
 
     // Spring Data JPA converts an equality comparison against a null bound parameter into
-    // "IS NULL" automatically, so passing planId=null here correctly matches network-only
-    // (no specific plan) evidence rows.
-    Optional<ProviderNetworkEvidence> findByProviderIdAndNetworkIdAndPlanIdAndSourceId(
-            Long providerId, Long networkId, Long planId, Long sourceId);
+    // "IS NULL" automatically, so passing planId=null/locationId=null here correctly matches
+    // network-only / provider-wide (no specific plan/location) evidence rows.
+    Optional<ProviderNetworkEvidence> findByProviderIdAndNetworkIdAndPlanIdAndSourceIdAndProviderLocationId(
+            Long providerId, Long networkId, Long planId, Long sourceId, Long providerLocationId);
+
+    boolean existsByProviderIdAndNetworkIdAndPlanIdAndSourceId(Long providerId, Long networkId, Long planId, Long sourceId);
 }

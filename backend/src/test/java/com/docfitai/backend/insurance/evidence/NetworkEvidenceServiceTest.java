@@ -11,6 +11,7 @@ import com.docfitai.backend.insurance.NetworkSourceRepository;
 import com.docfitai.backend.insurance.connector.NetworkParticipationRecord;
 import com.docfitai.backend.insurance.dto.NetworkEvidenceDetailDto;
 import com.docfitai.backend.provider.Provider;
+import com.docfitai.backend.provider.ProviderLocationRepository;
 import com.docfitai.backend.provider.ProviderRepository;
 import com.docfitai.backend.testsupport.PostgresIntegrationSupport;
 import java.time.Instant;
@@ -33,6 +34,9 @@ class NetworkEvidenceServiceTest extends PostgresIntegrationSupport {
 
     @Autowired
     private ProviderRepository providerRepository;
+
+    @Autowired
+    private ProviderLocationRepository providerLocationRepository;
 
     @Autowired
     private NetworkSourceRepository networkSourceRepository;
@@ -59,17 +63,18 @@ class NetworkEvidenceServiceTest extends PostgresIntegrationSupport {
     @Test
     void freshnessIsDerivedFromCheckedAtNotStored() {
         Provider provider = insertProvider("6100000001");
+        var locations = providerLocationRepository.findByProviderIdOrderByPrimaryDescId(provider.getId());
         InsuranceNetwork network = network();
         InsurancePlan plan = plan();
         NetworkSource source = source();
 
         Instant freshCheck = Instant.now().minus(5, ChronoUnit.DAYS);
         importService.recordObservation(
-                provider, network, plan, source,
+                provider, locations, network, plan, source,
                 List.of(new NetworkParticipationRecord(provider.getNpiNumber(), "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, freshCheck)),
                 freshCheck);
 
-        NetworkEvidenceDetailDto detail = networkEvidenceService.lookup(provider.getId(), plan);
+        NetworkEvidenceDetailDto detail = networkEvidenceService.lookup(provider.getId(), null, plan);
         assertThat(detail.status()).isEqualTo("EVIDENCE_FOUND");
         assertThat(detail.freshness()).isEqualTo("FRESH");
         assertThat(detail.sourceName()).isNotBlank();
@@ -77,11 +82,11 @@ class NetworkEvidenceServiceTest extends PostgresIntegrationSupport {
 
         Instant staleCheck = Instant.now().minus(90, ChronoUnit.DAYS);
         importService.recordObservation(
-                provider, network, plan, source,
+                provider, locations, network, plan, source,
                 List.of(new NetworkParticipationRecord(provider.getNpiNumber(), "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, staleCheck)),
                 staleCheck);
 
-        NetworkEvidenceDetailDto staleDetail = networkEvidenceService.lookup(provider.getId(), plan);
+        NetworkEvidenceDetailDto staleDetail = networkEvidenceService.lookup(provider.getId(), null, plan);
         assertThat(staleDetail.freshness()).isEqualTo("STALE");
     }
 
@@ -90,7 +95,7 @@ class NetworkEvidenceServiceTest extends PostgresIntegrationSupport {
         Provider provider = insertProvider("6100000002");
         InsurancePlan plan = plan();
 
-        NetworkEvidenceDetailDto detail = networkEvidenceService.lookup(provider.getId(), plan);
+        NetworkEvidenceDetailDto detail = networkEvidenceService.lookup(provider.getId(), null, plan);
 
         assertThat(detail.status()).isEqualTo("NOT_CHECKED");
         assertThat(detail.limitations()).isNotEmpty();
@@ -99,28 +104,26 @@ class NetworkEvidenceServiceTest extends PostgresIntegrationSupport {
     @Test
     void disabledSourceDegradesToSourceUnavailableWithoutBreakingLookup() {
         Provider provider = insertProvider("6100000003");
+        var locations = providerLocationRepository.findByProviderIdOrderByPrimaryDescId(provider.getId());
         InsuranceNetwork network = network();
         InsurancePlan plan = plan();
         NetworkSource source = source();
         Instant now = Instant.now();
         importService.recordObservation(
-                provider, network, plan, source,
+                provider, locations, network, plan, source,
                 List.of(new NetworkParticipationRecord(provider.getNpiNumber(), "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, now)),
                 now);
 
         jdbcTemplate.update("UPDATE network_source SET active = false WHERE id = ?", source.getId());
 
-        NetworkEvidenceDetailDto detail = networkEvidenceService.lookup(provider.getId(), plan);
+        NetworkEvidenceDetailDto detail = networkEvidenceService.lookup(provider.getId(), null, plan);
         assertThat(detail.status()).isEqualTo("SOURCE_UNAVAILABLE");
 
         jdbcTemplate.update("UPDATE network_source SET active = true WHERE id = ?", source.getId());
     }
 
     private Provider insertProvider(String npi) {
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, postal_code) "
-                        + "VALUES (?, 'Fresh', 'TestDoctor', '1 Test Ave', 'Long Beach', 'CA', '90802')",
-                npi);
+        insertProviderWithLocation(jdbcTemplate, npi, "Fresh", "TestDoctor", "1 Test Ave", "Long Beach", "CA", "90802", null, null, null);
         return providerRepository.findByNpiNumber(npi).orElseThrow();
     }
 

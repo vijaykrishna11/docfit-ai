@@ -1,6 +1,8 @@
 package com.docfitai.backend.insurance.connector;
 
 import com.docfitai.backend.provider.Provider;
+import com.docfitai.backend.provider.ProviderLocation;
+import com.docfitai.backend.provider.ProviderLocationRepository;
 import com.docfitai.backend.provider.ProviderRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -8,13 +10,15 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
- * The only connector active by default. Produces small, deterministic, clearly-synthetic
- * participation records for DocFit's own "DocFit Demo Network (synthetic test data)" payer --
- * never a real payer. See CLAUDE.md 42 and docs/insurance-network-architecture.md ("Demo data").
+ * The only connector active by default (and only when explicitly enabled -- see
+ * DemoNetworkEvidenceSeeder). Produces small, deterministic, clearly-synthetic participation
+ * records for DocFit's own "DocFit Demo Network (synthetic test data)" payer -- never a real
+ * payer. See CLAUDE.md 42 and docs/insurance-network-architecture.md ("Demo data").
  *
- * <p>Looking up the provider's own address to sometimes echo it back is a deliberate simulation
- * of what a real source's matched-location field would contain -- it is not a shortcut a real
- * connector could take (a real payer source reports its own address data, not DocFit's).
+ * <p>Looking up the provider's own practice location to sometimes echo it back is a deliberate
+ * simulation of what a real source's matched-location field would contain -- it is not a
+ * shortcut a real connector could take (a real payer source reports its own address data, not
+ * DocFit's).
  */
 @Component
 public class DemoNetworkConnector implements ProviderNetworkConnector {
@@ -24,9 +28,11 @@ public class DemoNetworkConnector implements ProviderNetworkConnector {
     private static final String PLAN_ID = "DEMO-PLAN-1";
 
     private final ProviderRepository providerRepository;
+    private final ProviderLocationRepository providerLocationRepository;
 
-    public DemoNetworkConnector(ProviderRepository providerRepository) {
+    public DemoNetworkConnector(ProviderRepository providerRepository, ProviderLocationRepository providerLocationRepository) {
         this.providerRepository = providerRepository;
+        this.providerLocationRepository = providerLocationRepository;
     }
 
     @Override
@@ -45,12 +51,12 @@ public class DemoNetworkConnector implements ProviderNetworkConnector {
         Instant sourceUpdated = Instant.now().minus(Math.floorMod(npi.hashCode(), 45), ChronoUnit.DAYS);
 
         if (bucket <= 2) {
-            // Simulated exact location confirmation.
-            Provider provider = providerRepository.findByNpiNumber(npi).orElse(null);
-            if (provider != null) {
+            // Simulated exact location confirmation, against the provider's primary practice location.
+            ProviderLocation location = primaryLocation(npi);
+            if (location != null) {
                 return List.of(new NetworkParticipationRecord(
-                        npi, NETWORK_ID, PLAN_ID, provider.getAddressLine1(), provider.getCity(), provider.getStateCode(),
-                        provider.getPostalCode(), sourceUpdated));
+                        npi, NETWORK_ID, PLAN_ID, location.getAddressLine1(), location.getCity(), location.getStateCode(),
+                        location.getPostalCode(), sourceUpdated));
             }
             return List.of(new NetworkParticipationRecord(npi, NETWORK_ID, PLAN_ID, null, null, null, null, sourceUpdated));
         }
@@ -61,8 +67,8 @@ public class DemoNetworkConnector implements ProviderNetworkConnector {
         if (bucket == 5) {
             // Source reports only a postal code that happens to match -- simulated by reusing the
             // provider's real postal code with a different street line.
-            Provider provider = providerRepository.findByNpiNumber(npi).orElse(null);
-            String postal = provider != null ? provider.getPostalCode() : "90802";
+            ProviderLocation location = primaryLocation(npi);
+            String postal = location != null ? location.getPostalCode() : "90802";
             return List.of(new NetworkParticipationRecord(
                     npi, NETWORK_ID, PLAN_ID, "Different suite reported by source", "Unspecified", "CA", postal, sourceUpdated));
         }
@@ -74,6 +80,15 @@ public class DemoNetworkConnector implements ProviderNetworkConnector {
         }
         // buckets 6-8: checked, no evidence found.
         return List.of();
+    }
+
+    private ProviderLocation primaryLocation(String npi) {
+        Provider provider = providerRepository.findByNpiNumber(npi).orElse(null);
+        if (provider == null) {
+            return null;
+        }
+        List<ProviderLocation> locations = providerLocationRepository.findByProviderIdOrderByPrimaryDescId(provider.getId());
+        return locations.isEmpty() ? null : locations.get(0);
     }
 
     @Override

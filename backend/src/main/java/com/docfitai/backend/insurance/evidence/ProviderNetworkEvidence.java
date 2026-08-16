@@ -4,6 +4,7 @@ import com.docfitai.backend.insurance.InsuranceNetwork;
 import com.docfitai.backend.insurance.InsurancePlan;
 import com.docfitai.backend.insurance.NetworkSource;
 import com.docfitai.backend.provider.Provider;
+import com.docfitai.backend.provider.ProviderLocation;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -35,6 +36,15 @@ public class ProviderNetworkEvidence {
     @ManyToOne
     @JoinColumn(name = "insurance_plan_id")
     private InsurancePlan plan;
+
+    /**
+     * The specific practice location this evidence applies to, when the source data supports
+     * that granularity. Null means the evidence is provider-wide (not tied to one office) --
+     * never inferred/guessed onto a specific location (CLAUDE.md 8-9).
+     */
+    @ManyToOne
+    @JoinColumn(name = "provider_location_id")
+    private ProviderLocation providerLocation;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -82,6 +92,7 @@ public class ProviderNetworkEvidence {
             Provider provider,
             InsuranceNetwork network,
             InsurancePlan plan,
+            ProviderLocation providerLocation,
             NetworkEvidenceStatus status,
             NetworkSource source,
             String sourceProviderIdentifier,
@@ -95,6 +106,7 @@ public class ProviderNetworkEvidence {
         this.provider = provider;
         this.network = network;
         this.plan = plan;
+        this.providerLocation = providerLocation;
         this.status = status;
         this.source = source;
         this.sourceProviderIdentifier = sourceProviderIdentifier;
@@ -131,6 +143,10 @@ public class ProviderNetworkEvidence {
 
     public InsurancePlan getPlan() {
         return plan;
+    }
+
+    public ProviderLocation getProviderLocation() {
+        return providerLocation;
     }
 
     public NetworkEvidenceStatus getStatus() {

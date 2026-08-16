@@ -5,6 +5,7 @@ import com.docfitai.backend.insurance.InsurancePlan;
 import com.docfitai.backend.insurance.NetworkSource;
 import com.docfitai.backend.insurance.connector.NetworkParticipationRecord;
 import com.docfitai.backend.provider.Provider;
+import com.docfitai.backend.provider.ProviderLocation;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -13,10 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Turns a connector's raw {@link NetworkParticipationRecord} matches into a stored evidence
- * observation, deciding the {@link MatchMethod} by comparing the source's reported location
- * against DocFit AI's own provider record -- never trusting the source's self-reported match
- * quality (CLAUDE.md 11). Never called from a live search request; only from operator-triggered
- * import code (CLAUDE.md 89).
+ * observation, deciding the {@link MatchMethod} -- and, where possible, which specific
+ * {@link ProviderLocation} the evidence applies to -- by comparing the source's reported location
+ * against DocFit AI's own provider location records, never trusting the source's self-reported
+ * match quality (CLAUDE.md 11). A location is only ever bound when it can be deterministically
+ * resolved (CLAUDE.md 8) -- ambiguous or address-less matches stay provider-wide (null location).
+ * Never called from a live search request; only from operator-triggered import code (CLAUDE.md 89).
  */
 @Service
 public class NetworkEvidenceImportService {
@@ -30,17 +33,20 @@ public class NetworkEvidenceImportService {
     @Transactional
     public ProviderNetworkEvidence recordObservation(
             Provider provider,
+            List<ProviderLocation> providerLocations,
             InsuranceNetwork network,
             InsurancePlan plan,
             NetworkSource source,
             List<NetworkParticipationRecord> matches,
             Instant checkedAt) {
         Long planId = plan == null ? null : plan.getId();
-        ProviderNetworkEvidence existing = evidenceRepository
-                .findByProviderIdAndNetworkIdAndPlanIdAndSourceId(provider.getId(), network.getId(), planId, source.getId())
-                .orElse(null);
+        Observation observation = classify(providerLocations, matches);
+        Long locationId = observation.matchedLocation() == null ? null : observation.matchedLocation().getId();
 
-        Observation observation = classify(provider, matches);
+        ProviderNetworkEvidence existing = evidenceRepository
+                .findByProviderIdAndNetworkIdAndPlanIdAndSourceIdAndProviderLocationId(
+                        provider.getId(), network.getId(), planId, source.getId(), locationId)
+                .orElse(null);
 
         if (existing != null) {
             existing.reconfirm(observation.status(), observation.matchMethod(), checkedAt, observation.sourceLastUpdatedAt());
@@ -50,6 +56,7 @@ public class NetworkEvidenceImportService {
                 provider,
                 network,
                 plan,
+                observation.matchedLocation(),
                 observation.status(),
                 source,
                 provider.getNpiNumber(),
@@ -63,9 +70,9 @@ public class NetworkEvidenceImportService {
         return evidenceRepository.save(created);
     }
 
-    private Observation classify(Provider provider, List<NetworkParticipationRecord> matches) {
+    private Observation classify(List<ProviderLocation> providerLocations, List<NetworkParticipationRecord> matches) {
         if (matches.isEmpty()) {
-            return new Observation(NetworkEvidenceStatus.NO_EVIDENCE_FOUND, MatchMethod.NPI_EXACT, null, null, null, null, null);
+            return new Observation(NetworkEvidenceStatus.NO_EVIDENCE_FOUND, MatchMethod.NPI_EXACT, null, null, null, null, null, null);
         }
         if (matches.size() > 1) {
             NetworkParticipationRecord first = matches.get(0);
@@ -76,34 +83,47 @@ public class NetworkEvidenceImportService {
                     first.city(),
                     first.stateCode(),
                     first.postalCode(),
-                    first.sourceLastUpdatedAt());
+                    first.sourceLastUpdatedAt(),
+                    null);
         }
         NetworkParticipationRecord match = matches.get(0);
-        MatchMethod method = matchMethodFor(provider, match);
+        LocationMatch locationMatch = matchLocation(providerLocations, match);
         return new Observation(
                 NetworkEvidenceStatus.EVIDENCE_FOUND,
-                method,
+                locationMatch.method(),
                 match.addressLine1(),
                 match.city(),
                 match.stateCode(),
                 match.postalCode(),
-                match.sourceLastUpdatedAt());
+                match.sourceLastUpdatedAt(),
+                locationMatch.location());
     }
 
-    private static MatchMethod matchMethodFor(Provider provider, NetworkParticipationRecord match) {
+    /**
+     * Prefers an exact address+city+postal match to one specific location; falls back to a
+     * postal-only match; never binds to a location it can't justify (CLAUDE.md 8-9).
+     */
+    private static LocationMatch matchLocation(List<ProviderLocation> providerLocations, NetworkParticipationRecord match) {
         if (match.postalCode() == null) {
-            return MatchMethod.NPI_EXACT;
+            return new LocationMatch(MatchMethod.NPI_EXACT, null);
         }
-        boolean postalMatches = match.postalCode().equals(provider.getPostalCode());
-        boolean lineMatches = match.addressLine1() != null && match.addressLine1().equalsIgnoreCase(provider.getAddressLine1());
-        boolean cityMatches = Objects.equals(match.city(), provider.getCity());
-        if (postalMatches && lineMatches && cityMatches) {
-            return MatchMethod.NPI_AND_LOCATION;
+        for (ProviderLocation candidate : providerLocations) {
+            boolean postalMatches = match.postalCode().equals(candidate.getPostalCode());
+            boolean lineMatches = match.addressLine1() != null && match.addressLine1().equalsIgnoreCase(candidate.getAddressLine1());
+            boolean cityMatches = Objects.equals(match.city(), candidate.getCity());
+            if (postalMatches && lineMatches && cityMatches) {
+                return new LocationMatch(MatchMethod.NPI_AND_LOCATION, candidate);
+            }
         }
-        if (postalMatches) {
-            return MatchMethod.NPI_AND_POSTAL_CODE;
+        for (ProviderLocation candidate : providerLocations) {
+            if (match.postalCode().equals(candidate.getPostalCode())) {
+                return new LocationMatch(MatchMethod.NPI_AND_POSTAL_CODE, candidate);
+            }
         }
-        return MatchMethod.NPI_EXACT;
+        return new LocationMatch(MatchMethod.NPI_EXACT, null);
+    }
+
+    private record LocationMatch(MatchMethod method, ProviderLocation location) {
     }
 
     private record Observation(
@@ -113,6 +133,7 @@ public class NetworkEvidenceImportService {
             String city,
             String stateCode,
             String postalCode,
-            Instant sourceLastUpdatedAt) {
+            Instant sourceLastUpdatedAt,
+            ProviderLocation matchedLocation) {
     }
 }

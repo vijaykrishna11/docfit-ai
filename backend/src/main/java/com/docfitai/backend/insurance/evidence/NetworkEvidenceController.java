@@ -30,13 +30,14 @@ public class NetworkEvidenceController {
     }
 
     @GetMapping("/{id}/network-evidence")
-    public NetworkEvidenceDetailDto getNetworkEvidence(@PathVariable Long id, @RequestParam Long planId) {
+    public NetworkEvidenceDetailDto getNetworkEvidence(
+            @PathVariable Long id, @RequestParam Long planId, @RequestParam(required = false) Long locationId) {
         if (!providerRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown provider");
         }
         InsurancePlan plan = insurancePlanRepository
                 .findById(planId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown plan"));
-        return networkEvidenceService.lookup(id, plan);
+        return networkEvidenceService.lookup(id, locationId, plan);
     }
 }

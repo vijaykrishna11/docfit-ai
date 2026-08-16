@@ -11,6 +11,7 @@ import com.docfitai.backend.insurance.evidence.NetworkEvidenceImportService;
 import com.docfitai.backend.insurance.evidence.ProviderNetworkEvidenceRepository;
 import com.docfitai.backend.insurance.connector.NetworkParticipationRecord;
 import com.docfitai.backend.provider.Provider;
+import com.docfitai.backend.provider.ProviderLocationRepository;
 import com.docfitai.backend.provider.ProviderRepository;
 import com.docfitai.backend.provider.dto.ProviderSearchResponseDto;
 import com.docfitai.backend.testsupport.PostgresIntegrationSupport;
@@ -34,6 +35,9 @@ class InsuranceApiTest extends PostgresIntegrationSupport {
 
     @Autowired
     private ProviderRepository providerRepository;
+
+    @Autowired
+    private ProviderLocationRepository providerLocationRepository;
 
     @Autowired
     private InsuranceNetworkRepository insuranceNetworkRepository;
@@ -88,11 +92,8 @@ class InsuranceApiTest extends PostgresIntegrationSupport {
     @Test
     void searchWithPlanIdAttachesNetworkEvidenceWithoutBreakingResultsWhenEvidenceMissing() throws Exception {
         String npi = "5000000001";
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, postal_code, latitude, longitude) "
-                        + "VALUES (?, 'Search', 'EvidenceDoctor', '200 Ocean Blvd', 'Long Beach', 'CA', '90802', 33.770000, -118.191000)",
-                npi);
-        Long providerId = jdbcTemplate.queryForObject("SELECT id FROM provider WHERE npi_number = ?", Long.class, npi);
+        Long providerId = insertProviderWithLocation(
+                jdbcTemplate, npi, "Search", "EvidenceDoctor", "200 Ocean Blvd", "Long Beach", "CA", "90802", null, 33.770000, -118.191000);
         jdbcTemplate.update(
                 "INSERT INTO provider_taxonomy (provider_id, taxonomy_code, primary_taxonomy) VALUES (?, '207RC0000X', true)",
                 providerId);
@@ -121,18 +122,16 @@ class InsuranceApiTest extends PostgresIntegrationSupport {
     @Test
     void networkEvidenceDetailEndpointReturnsSourceAndMatchMethodWhenFound() throws Exception {
         String npi = "5000000002";
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, postal_code) "
-                        + "VALUES (?, 'Detail', 'EvidenceDoctor', '1 Test Ave', 'Long Beach', 'CA', '90802')",
-                npi);
+        insertProviderWithLocation(jdbcTemplate, npi, "Detail", "EvidenceDoctor", "1 Test Ave", "Long Beach", "CA", "90802", null, null, null);
         Provider provider = providerRepository.findByNpiNumber(npi).orElseThrow();
+        var locations = providerLocationRepository.findByProviderIdOrderByPrimaryDescId(provider.getId());
         Long payerId = jdbcTemplate.queryForObject("SELECT id FROM payer WHERE code = 'DOCFIT_DEMO'", Long.class);
         var network = insuranceNetworkRepository.findByPayerIdAndExternalNetworkIdentifier(payerId, "DEMO-NETWORK-1").orElseThrow();
         var plan = insurancePlanRepository.findByPayerIdAndExternalPlanIdentifier(payerId, "DEMO-PLAN-1").orElseThrow();
         var source = networkSourceRepository.findByPayerId(payerId).get(0);
         Instant now = Instant.now();
         importService.recordObservation(
-                provider, network, plan, source,
+                provider, locations, network, plan, source,
                 List.of(new NetworkParticipationRecord(npi, "DEMO-NETWORK-1", "DEMO-PLAN-1", "1 Test Ave", "Long Beach", "CA", "90802", now)),
                 now);
 

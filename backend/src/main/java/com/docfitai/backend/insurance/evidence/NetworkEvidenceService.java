@@ -18,6 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
  * request (CLAUDE.md 89). Always returns a result for every provider asked about; a missing or
  * disabled source becomes an explicit status (SOURCE_UNAVAILABLE/NOT_CHECKED), never an
  * exception, so provider search is never broken by insurance data (CLAUDE.md 44).
+ *
+ * <p>Location-aware (CLAUDE.md 9): when a specific practice location is being displayed, evidence
+ * bound to that exact location is preferred; provider-wide evidence (no location) is the
+ * fallback. Evidence recorded for a *different* specific location is never silently applied to
+ * the location actually shown.
  */
 @Service
 @Transactional(readOnly = true)
@@ -41,40 +46,82 @@ public class NetworkEvidenceService {
         this.freshnessProperties = freshnessProperties;
     }
 
-    public Map<Long, NetworkEvidenceSummaryDto> summarizeForProviders(List<Long> providerIds, Long planId) {
-        if (providerIds.isEmpty() || planId == null) {
+    /**
+     * @param providerLocations providerId -> the specific location id currently being displayed
+     *     for that provider (nullable per-entry when no location context is known)
+     */
+    public Map<Long, NetworkEvidenceSummaryDto> summarizeForProviders(Map<Long, Long> providerLocations, Long planId) {
+        if (providerLocations.isEmpty() || planId == null) {
             return Map.of();
         }
         InsurancePlan plan = planRepository.findById(planId).orElse(null);
         if (plan == null) {
             return Map.of();
         }
-        Map<Long, ProviderNetworkEvidence> byProvider = resolveEvidence(providerIds, plan);
+        Map<Long, List<ProviderNetworkEvidence>> byProvider = resolveEvidence(providerLocations.keySet().stream().toList(), plan);
 
         Map<Long, NetworkEvidenceSummaryDto> result = new HashMap<>();
-        for (Long providerId : providerIds) {
-            result.put(providerId, toSummary(byProvider.get(providerId), plan));
+        for (Map.Entry<Long, Long> entry : providerLocations.entrySet()) {
+            ProviderNetworkEvidence evidence = pickForLocation(byProvider.get(entry.getKey()), entry.getValue());
+            result.put(entry.getKey(), toSummary(evidence, plan));
         }
         return result;
     }
 
-    public NetworkEvidenceDetailDto lookup(Long providerId, InsurancePlan plan) {
-        Map<Long, ProviderNetworkEvidence> byProvider = resolveEvidence(List.of(providerId), plan);
-        return toDetail(providerId, byProvider.get(providerId), plan);
+    public NetworkEvidenceDetailDto lookup(Long providerId, Long locationId, InsurancePlan plan) {
+        Map<Long, List<ProviderNetworkEvidence>> byProvider = resolveEvidence(List.of(providerId), plan);
+        ProviderNetworkEvidence evidence = pickForLocation(byProvider.get(providerId), locationId);
+        return toDetail(providerId, evidence, plan);
     }
 
-    private Map<Long, ProviderNetworkEvidence> resolveEvidence(List<Long> providerIds, InsurancePlan plan) {
-        Map<Long, ProviderNetworkEvidence> byProvider = new HashMap<>();
+    private Map<Long, List<ProviderNetworkEvidence>> resolveEvidence(List<Long> providerIds, InsurancePlan plan) {
+        Map<Long, List<ProviderNetworkEvidence>> byProvider = new HashMap<>();
         for (ProviderNetworkEvidence e : evidenceRepository.findByProviderIdsAndPlanId(providerIds, plan.getId())) {
-            byProvider.put(e.getProvider().getId(), e);
+            byProvider.computeIfAbsent(e.getProvider().getId(), key -> new java.util.ArrayList<>()).add(e);
         }
         List<Long> networkIds = plan.getNetworks().stream().map(InsuranceNetwork::getId).toList();
         if (!networkIds.isEmpty()) {
             for (ProviderNetworkEvidence e : evidenceRepository.findByProviderIdsAndNetworkIdsNoPlan(providerIds, networkIds)) {
-                byProvider.putIfAbsent(e.getProvider().getId(), e);
+                // Plan-specific evidence always wins over network-level fallback for a given provider.
+                if (!byProvider.containsKey(e.getProvider().getId())) {
+                    byProvider.computeIfAbsent(e.getProvider().getId(), key -> new java.util.ArrayList<>()).add(e);
+                }
             }
         }
         return byProvider;
+    }
+
+    /**
+     * Prefers evidence bound to the exact location being displayed; falls back to provider-wide
+     * evidence (no location). When the caller has no specific location context at all
+     * ({@code locationId == null}) and every remaining candidate happens to point at the very
+     * same single location, it's unambiguous to show it anyway -- but if candidates span more
+     * than one distinct location, evidence is never guessed across locations (CLAUDE.md 9).
+     */
+    private static ProviderNetworkEvidence pickForLocation(List<ProviderNetworkEvidence> candidates, Long locationId) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        if (locationId != null) {
+            for (ProviderNetworkEvidence e : candidates) {
+                if (e.getProviderLocation() != null && e.getProviderLocation().getId().equals(locationId)) {
+                    return e;
+                }
+            }
+        }
+        for (ProviderNetworkEvidence e : candidates) {
+            if (e.getProviderLocation() == null) {
+                return e;
+            }
+        }
+        if (locationId == null) {
+            long distinctLocations =
+                    candidates.stream().map(e -> e.getProviderLocation().getId()).distinct().count();
+            if (distinctLocations == 1) {
+                return candidates.get(0);
+            }
+        }
+        return null;
     }
 
     private NetworkEvidenceSummaryDto toSummary(ProviderNetworkEvidence evidence, InsurancePlan plan) {

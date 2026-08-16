@@ -10,6 +10,8 @@ import com.docfitai.backend.insurance.NetworkSource;
 import com.docfitai.backend.insurance.NetworkSourceRepository;
 import com.docfitai.backend.insurance.connector.NetworkParticipationRecord;
 import com.docfitai.backend.provider.Provider;
+import com.docfitai.backend.provider.ProviderLocation;
+import com.docfitai.backend.provider.ProviderLocationRepository;
 import com.docfitai.backend.provider.ProviderRepository;
 import com.docfitai.backend.testsupport.PostgresIntegrationSupport;
 import java.time.Instant;
@@ -35,6 +37,9 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
     private ProviderRepository providerRepository;
 
     @Autowired
+    private ProviderLocationRepository providerLocationRepository;
+
+    @Autowired
     private NetworkSourceRepository networkSourceRepository;
 
     @Autowired
@@ -52,6 +57,7 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
     @Test
     void matchMethodsAreClassifiedExplainably() {
         Provider provider = insertProvider(NPI, "200 Ocean Blvd", "Long Beach", "CA", "90802");
+        List<ProviderLocation> locations = providerLocationRepository.findByProviderIdOrderByPrimaryDescId(provider.getId());
         InsuranceNetwork network = insuranceNetworkRepository
                 .findByPayerIdAndExternalNetworkIdentifier(payerId(), "DEMO-NETWORK-1")
                 .orElseThrow();
@@ -64,6 +70,7 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
         // Exact location match.
         ProviderNetworkEvidence located = importService.recordObservation(
                 provider,
+                locations,
                 network,
                 plan,
                 source,
@@ -71,10 +78,13 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
                 now);
         assertThat(located.getStatus()).isEqualTo(NetworkEvidenceStatus.EVIDENCE_FOUND);
         assertThat(located.getMatchMethod()).isEqualTo(MatchMethod.NPI_AND_LOCATION);
+        assertThat(located.getProviderLocation()).isNotNull();
+        assertThat(located.getProviderLocation().getId()).isEqualTo(locations.get(0).getId());
 
         // Postal-only match (different street line).
         ProviderNetworkEvidence postalOnly = importService.recordObservation(
                 provider,
+                locations,
                 network,
                 plan,
                 source,
@@ -84,12 +94,15 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
 
         // No location reported by source at all.
         ProviderNetworkEvidence noLocation = importService.recordObservation(
-                provider, network, plan, source, List.of(new NetworkParticipationRecord(NPI, "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, now)), now);
+                provider, locations, network, plan, source,
+                List.of(new NetworkParticipationRecord(NPI, "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, now)), now);
         assertThat(noLocation.getMatchMethod()).isEqualTo(MatchMethod.NPI_EXACT);
+        assertThat(noLocation.getProviderLocation()).isNull();
 
         // Two conflicting records -> ambiguous, never silently picks one as truth.
         ProviderNetworkEvidence ambiguous = importService.recordObservation(
                 provider,
+                locations,
                 network,
                 plan,
                 source,
@@ -102,13 +115,14 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
 
         // Checked, found nothing -- never conflated with "out of network".
         ProviderNetworkEvidence noEvidence =
-                importService.recordObservation(provider, network, plan, source, List.of(), now);
+                importService.recordObservation(provider, locations, network, plan, source, List.of(), now);
         assertThat(noEvidence.getStatus()).isEqualTo(NetworkEvidenceStatus.NO_EVIDENCE_FOUND);
     }
 
     @Test
     void reimportingTheSameObservationUpdatesRatherThanDuplicates() {
         Provider provider = insertProvider("6000000002", "1 Test Ave", "Long Beach", "CA", "90802");
+        List<ProviderLocation> locations = providerLocationRepository.findByProviderIdOrderByPrimaryDescId(provider.getId());
         InsuranceNetwork network = insuranceNetworkRepository
                 .findByPayerIdAndExternalNetworkIdentifier(payerId(), "DEMO-NETWORK-1")
                 .orElseThrow();
@@ -120,11 +134,11 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
         Instant secondCheck = Instant.now();
 
         importService.recordObservation(
-                provider, network, plan, source,
+                provider, locations, network, plan, source,
                 List.of(new NetworkParticipationRecord("6000000002", "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, firstCheck)),
                 firstCheck);
         importService.recordObservation(
-                provider, network, plan, source,
+                provider, locations, network, plan, source,
                 List.of(new NetworkParticipationRecord("6000000002", "DEMO-NETWORK-1", "DEMO-PLAN-1", null, null, null, null, secondCheck)),
                 secondCheck);
 
@@ -133,10 +147,7 @@ class NetworkEvidenceMatchingTest extends PostgresIntegrationSupport {
     }
 
     private Provider insertProvider(String npi, String line1, String city, String state, String postal) {
-        jdbcTemplate.update(
-                "INSERT INTO provider (npi_number, first_name, last_name, address_line_1, city, state_code, postal_code) "
-                        + "VALUES (?, 'Evidence', 'TestDoctor', ?, ?, ?, ?)",
-                npi, line1, city, state, postal);
+        insertProviderWithLocation(jdbcTemplate, npi, "Evidence", "TestDoctor", line1, city, state, postal, null, null, null);
         return providerRepository.findByNpiNumber(npi).orElseThrow();
     }
 
