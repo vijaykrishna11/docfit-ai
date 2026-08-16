@@ -88,7 +88,15 @@ function ProviderResults({
     )
   }
 
-  if (status === 'loading') {
+  // A refining search (sort/page/filter change) already has a previous result set to show --
+  // keep the existing list, map, and open filter panel mounted and visible while it loads,
+  // rather than replacing everything with a bare skeleton. That skeleton-only view is reserved
+  // for a genuine first load (no prior results yet), which is the only case where there's
+  // nothing meaningful to keep showing. Without this distinction, applying a filter would tear
+  // down (and silently close) the filter panel the user is still interacting with, mid-click.
+  const isRefining = status === 'loading' && results.length > 0
+
+  if (status === 'loading' && !isRefining) {
     return (
       <section className="results-section" aria-live="polite" aria-busy="true">
         <p className="results-heading-loading">Searching for providers…</p>
@@ -105,7 +113,7 @@ function ProviderResults({
   const effectiveTotal = totalElements ?? results.length
 
   return (
-    <section className="results-section" aria-live="polite">
+    <section className="results-section" aria-live="polite" aria-busy={isRefining}>
       <div className="results-toolbar">
         <div className="results-heading">
           <h2>Providers near {headingLabel}</h2>
