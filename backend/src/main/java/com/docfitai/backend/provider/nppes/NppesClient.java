@@ -19,10 +19,11 @@ public class NppesClient {
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public NppesResponse searchByPostalCode(String postalCode, int limit) {
+    /** @param enumerationType "NPI-1" (individual) or "NPI-2" (organization). */
+    public NppesResponse searchByPostalCode(String postalCode, String enumerationType, int limit) {
         String url = BASE_URL + "?version=2.1"
                 + "&postal_code=" + URLEncoder.encode(postalCode, StandardCharsets.UTF_8)
-                + "&enumeration_type=NPI-1"
+                + "&enumeration_type=" + URLEncoder.encode(enumerationType, StandardCharsets.UTF_8)
                 + "&limit=" + limit;
         HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
         try {

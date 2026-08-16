@@ -1,13 +1,16 @@
 package com.docfitai.backend.provider.nppes;
 
-import com.docfitai.backend.provider.Provider;
-import com.docfitai.backend.provider.ProviderRepository;
-import com.docfitai.backend.provider.ProviderTaxonomy;
-import com.docfitai.backend.provider.ProviderTaxonomyId;
-import com.docfitai.backend.provider.ProviderTaxonomyRepository;
+import com.docfitai.backend.provider.CoordinatePrecision;
+import com.docfitai.backend.provider.ingestion.DataImport;
+import com.docfitai.backend.provider.ingestion.DataImportRepository;
+import com.docfitai.backend.provider.ingestion.ProviderDataQualityService;
+import com.docfitai.backend.provider.ingestion.ProviderImportRecord;
+import com.docfitai.backend.provider.ingestion.ProviderLocationRecord;
+import com.docfitai.backend.provider.ingestion.ProviderUpsertService;
 import com.docfitai.backend.reference.ZipGeography;
 import com.docfitai.backend.reference.ZipGeographyRepository;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -25,6 +28,11 @@ import org.springframework.stereotype.Component;
  * profile is explicitly activated (e.g. {@code ./mvnw spring-boot:run -Dspring-boot.run.profiles=import}).
  * Not a scheduled job, queue consumer, or background worker -- it exits the JVM once the
  * one-off import finishes.
+ *
+ * <p>Fetches both individual (NPI-1) and organization (NPI-2) providers, and imports every
+ * practice location NPPES reports for each -- the single LOCATION address plus any genuine
+ * additional offices in NPPES's {@code practiceLocations} field (CLAUDE.md 4, 19). A single bad
+ * source record is logged and skipped rather than failing the whole import (CLAUDE.md 24).
  */
 @Component
 @Profile("import")
@@ -32,93 +40,118 @@ public class NppesImportRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(NppesImportRunner.class);
     private static final int RESULTS_PER_ZIP = 200;
+    private static final List<String> ENUMERATION_TYPES = List.of("NPI-1", "NPI-2");
 
     private final NppesClient nppesClient;
     private final ZipGeographyRepository zipGeographyRepository;
-    private final ProviderRepository providerRepository;
-    private final ProviderTaxonomyRepository providerTaxonomyRepository;
+    private final ProviderUpsertService providerUpsertService;
+    private final DataImportRepository dataImportRepository;
+    private final ProviderDataQualityService dataQualityService;
     private final JdbcTemplate jdbcTemplate;
     private final ConfigurableApplicationContext context;
 
     public NppesImportRunner(
             NppesClient nppesClient,
             ZipGeographyRepository zipGeographyRepository,
-            ProviderRepository providerRepository,
-            ProviderTaxonomyRepository providerTaxonomyRepository,
+            ProviderUpsertService providerUpsertService,
+            DataImportRepository dataImportRepository,
+            ProviderDataQualityService dataQualityService,
             JdbcTemplate jdbcTemplate,
             ConfigurableApplicationContext context) {
         this.nppesClient = nppesClient;
         this.zipGeographyRepository = zipGeographyRepository;
-        this.providerRepository = providerRepository;
-        this.providerTaxonomyRepository = providerTaxonomyRepository;
+        this.providerUpsertService = providerUpsertService;
+        this.dataImportRepository = dataImportRepository;
+        this.dataQualityService = dataQualityService;
         this.jdbcTemplate = jdbcTemplate;
         this.context = context;
     }
 
     @Override
     public void run(String... args) {
+        DataImport dataImport = new DataImport("NPPES", Instant.now());
+        dataImport = dataImportRepository.save(dataImport);
+
         Set<String> knownTaxonomyCodes =
                 Set.copyOf(jdbcTemplate.queryForList("SELECT taxonomy_code FROM npi_taxonomy", String.class));
-
         List<ZipGeography> demoZips = zipGeographyRepository.findAll();
-        int imported = 0;
-        int skippedExisting = 0;
+
         int skippedNoMatch = 0;
-
         for (ZipGeography zip : demoZips) {
-            NppesResponse response = nppesClient.searchByPostalCode(zip.getZipCode(), RESULTS_PER_ZIP);
-            log.info("NPPES postal_code={} returned {} raw results", zip.getZipCode(), response.resultCount());
+            for (String enumerationType : ENUMERATION_TYPES) {
+                NppesResponse response = nppesClient.searchByPostalCode(zip.getZipCode(), enumerationType, RESULTS_PER_ZIP);
+                log.info(
+                        "NPPES postal_code={} enumeration_type={} returned {} raw results",
+                        zip.getZipCode(),
+                        enumerationType,
+                        response.resultCount());
 
-            List<NppesResult> results = response.results() == null ? List.of() : response.results();
-            for (NppesResult result : results) {
-                Optional<NppesProviderMapper.MappedProvider> mapped =
-                        NppesProviderMapper.map(result, knownTaxonomyCodes);
-                if (mapped.isEmpty()) {
-                    skippedNoMatch++;
-                    continue;
+                List<NppesResult> results = response.results() == null ? List.of() : response.results();
+                for (NppesResult result : results) {
+                    Optional<NppesProviderMapper.MappedProvider> mapped = NppesProviderMapper.map(result, knownTaxonomyCodes);
+                    if (mapped.isEmpty()) {
+                        skippedNoMatch++;
+                        continue;
+                    }
+                    try {
+                        ProviderImportRecord importRecord = toImportRecord(mapped.get());
+                        var outcome = providerUpsertService.upsert(importRecord);
+                        dataImport.recordUpsert(outcome);
+                    } catch (Exception e) {
+                        log.warn("Failed to import NPI {}: {}", result.number(), e.getMessage());
+                        dataImport.recordFailure();
+                    }
                 }
-
-                NppesProviderMapper.MappedProvider mp = mapped.get();
-                if (providerRepository.existsByNpiNumber(mp.npiNumber())) {
-                    skippedExisting++;
-                    continue;
-                }
-
-                BigDecimal latitude = null;
-                BigDecimal longitude = null;
-                Optional<ZipGeography> coordZip = zipGeographyRepository.findById(mp.postalCode());
-                if (coordZip.isPresent()) {
-                    latitude = coordZip.get().getLatitude();
-                    longitude = coordZip.get().getLongitude();
-                }
-
-                Provider saved = providerRepository.save(new Provider(
-                        mp.npiNumber(),
-                        mp.firstName(),
-                        mp.lastName(),
-                        null,
-                        mp.phone(),
-                        mp.addressLine1(),
-                        mp.addressLine2(),
-                        mp.city(),
-                        mp.stateCode(),
-                        mp.postalCode(),
-                        latitude,
-                        longitude));
-
-                for (NppesTaxonomy taxonomy : mp.matchingTaxonomies()) {
-                    providerTaxonomyRepository.save(new ProviderTaxonomy(
-                            new ProviderTaxonomyId(saved.getId(), taxonomy.code()), taxonomy.primary()));
-                }
-                imported++;
             }
         }
 
+        dataImport.complete(Instant.now());
+        dataImportRepository.save(dataImport);
+
         log.info(
-                "NPPES import complete: imported={} skippedExisting={} skippedNoMatch={}",
-                imported,
-                skippedExisting,
+                "NPPES import complete: status={} recordsRead={} providersCreated={} providersUpdated={} "
+                        + "locationsCreated={} locationsUpdated={} recordsFailed={} skippedNoTaxonomyOrLocationMatch={}",
+                dataImport.getStatus(),
+                dataImport.getRecordsRead(),
+                dataImport.getProvidersCreated(),
+                dataImport.getProvidersUpdated(),
+                dataImport.getLocationsCreated(),
+                dataImport.getLocationsUpdated(),
+                dataImport.getRecordsFailed(),
                 skippedNoMatch);
+
+        dataQualityService.runChecks();
+
         System.exit(SpringApplication.exit(context, () -> 0));
+    }
+
+    /** Geocoding (ZIP -> coordinates) happens here, not in the pure mapper -- always truthfully labeled ZIP_CENTROID, never a real address geocode. */
+    private ProviderImportRecord toImportRecord(NppesProviderMapper.MappedProvider mapped) {
+        List<ProviderLocationRecord> locationRecords = mapped.locations().stream()
+                .map(location -> {
+                    BigDecimal latitude = null;
+                    BigDecimal longitude = null;
+                    CoordinatePrecision precision = CoordinatePrecision.UNKNOWN;
+                    Optional<ZipGeography> coordZip = zipGeographyRepository.findById(location.postalCode());
+                    if (coordZip.isPresent()) {
+                        latitude = coordZip.get().getLatitude();
+                        longitude = coordZip.get().getLongitude();
+                        precision = CoordinatePrecision.ZIP_CENTROID;
+                    }
+                    return new ProviderLocationRecord(
+                            "LOCATION",
+                            location.addressLine1(),
+                            location.addressLine2(),
+                            location.city(),
+                            location.stateCode(),
+                            location.postalCode(),
+                            location.phone(),
+                            location.fax(),
+                            latitude,
+                            longitude,
+                            precision);
+                })
+                .toList();
+        return new ProviderImportRecord(mapped.identity(), locationRecords, mapped.taxonomies());
     }
 }
