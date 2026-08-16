@@ -55,6 +55,7 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/specialties",
                                 "/api/insurance-carriers",
+                                "/api/insurance/**",
                                 "/api/providers/**",
                                 "/api/locations/**")
                         .permitAll()
