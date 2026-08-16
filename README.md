@@ -34,8 +34,10 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
   active search, and working Call / Get Directions actions
 - Provider comparison (`/compare`) for up to 3 providers, side by side, factual fields only —
   no ratings, quality claims, or clinical recommendations
-- Insurance carrier selection, clearly labeled as demo/informational only — it is never sent to
-  the search API and never implies a provider accepts a given plan
+- Insurance network evidence: an optional payer/plan selector shows sourced, dated **network
+  directory evidence** for providers — never a coverage guarantee. Most payers have no
+  integration yet and are clearly labeled as such; search never requires or is blocked by an
+  insurance selection. See `docs/insurance-network-architecture.md`.
 - Responsive, accessible UI: keyboard-navigable mobile menu, focus-visible states, `aria-live`
   search status, `prefers-reduced-motion` support
 - Provider name search ("Already know who you're looking for?") for finding a specific provider
@@ -116,9 +118,11 @@ Flyway-managed table groups.
 - **Geography**: a small, intentionally limited demo set of ZIP codes covering Long Beach and
   nearby Los Angeles County (90802, 90803, 90806, 90815, 90712, 90755), sourced from U.S. Census
   ZCTA reference data. Location search and suggestions only work within this demo area.
-- **Insurance**: a static list of well-known carrier names for the insurance dropdown. Selecting
-  a carrier is informational only — DocFit AI has no real insurance-compatibility data source,
-  and the UI/API never imply a provider accepts a given plan.
+- **Insurance**: a static list of well-known carrier names (legacy, informational only) plus a
+  real payer/plan/network/evidence domain model. Only one payer ("DocFit Demo Network") has
+  integrated plan data today, and it is clearly labeled synthetic demo data end-to-end — see
+  `docs/insurance-network-research.md` for why no live payer integration is wired in by default,
+  and `docs/insurance-network-architecture.md` for the full model.
 - **Distance**: an approximate straight-line (Haversine) calculation, not driving distance or
   time.
 
@@ -168,6 +172,8 @@ via environment variables for anything beyond local dev:
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
 | `AUTH_COOKIE_SECURE` | `false` | Set `true` in any real (HTTPS) deployment |
 | `AUTH_RATE_LIMIT_MAX_ATTEMPTS` / `AUTH_RATE_LIMIT_WINDOW_MINUTES` | `10` / `5` | In-memory, per-IP+email sliding-window limiter on register/login — single-instance only, not distributed (documented limitation, not a bug) |
+| `NETWORK_EVIDENCE_FRESH_DAYS` / `NETWORK_EVIDENCE_AGING_DAYS` | `30` / `60` | Freshness band thresholds for network evidence display — see `docs/insurance-network-architecture.md` |
+| `FHIR_PLAN_NET_BASE_URL` | unset | Only set this to point the real `FhirPlanNetConnector` at a specific, vetted payer's Da Vinci Plan-Net endpoint — unset by default, so no live payer source is used out of the box |
 
 > **Windows PowerShell note:** if `npm` is blocked by PowerShell's script-execution policy
 > (`npm.ps1 cannot be loaded...`), use `npm.cmd` instead (e.g. `npm.cmd install`,
@@ -197,7 +203,12 @@ search flow, provider cards, detail page, and comparison view are all fully func
 
 Reasonable future directions, not yet built:
 
-- Legitimate insurance-compatibility integration (a real data source, not a static list)
+- A real, live payer network directory integration (the connector architecture and a spec-shaped
+  FHIR Plan-Net client exist; no specific payer endpoint is wired in by default — see
+  `docs/insurance-network-research.md`)
+- Cost/price transparency intelligence (research only so far — see `docs/cost-intelligence-research.md`)
+- "Save my plan" as an explicit, deletable, opt-in user preference (deliberately deferred this
+  phase — see `docs/insurance-network-architecture.md`, "Privacy")
 - Expanded provider geography beyond the current Long Beach / LA demo area
 - Richer provider profiles (hours, languages, accepting-new-patients where reliably sourced)
 - Provider availability integration, only where a reliable data source exists

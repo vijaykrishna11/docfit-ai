@@ -36,10 +36,11 @@ Lists the supported specialty groups.
 
 ---
 
-## `GET /api/insurance-carriers`
+## `GET /api/insurance-carriers` (legacy)
 
 Lists the demo insurance carrier options. **Informational only** -- there is no real
-compatibility data behind this list, and it has no effect on provider search.
+compatibility data behind this list, and it has no effect on provider search. Superseded by
+`/api/insurance/payers` below; kept for backward compatibility, not used by the current frontend.
 
 **Example response**
 ```json
@@ -48,6 +49,88 @@ compatibility data behind this list, and it has no effect on provider search.
   { "id": 2, "name": "Anthem Blue Cross" }
 ]
 ```
+
+---
+
+## Insurance network intelligence
+
+See `docs/insurance-network-architecture.md` for the full design. Summary: DocFit AI can show
+**network directory evidence** for a small number of integrated payers -- never a coverage
+guarantee. Selecting a payer/plan is entirely optional and never required to search.
+
+### `GET /api/insurance/payers`
+
+Lists payers DocFit AI knows about. `hasIntegratedPlans` distinguishes "known carrier name" from
+"has real (or clearly-labeled synthetic demo) plan/network data" -- most payers are the former.
+
+**Example response**
+```json
+[
+  { "id": 1, "code": "AETNA", "name": "Aetna", "hasIntegratedPlans": false },
+  { "id": 9, "code": "DOCFIT_DEMO", "name": "DocFit Demo Network (synthetic test data)", "hasIntegratedPlans": true }
+]
+```
+
+### `GET /api/insurance/payers/{id}/plans`
+
+Plans for a payer. Empty array if that payer has no integration. **404** for an unknown payer id.
+
+**Example response**
+```json
+[
+  { "id": 1, "payerId": 9, "planName": "DocFit Demo PPO (synthetic)", "planType": "PPO" }
+]
+```
+
+### `GET /api/providers/{id}/network-evidence?planId=`
+
+Full network evidence detail for one provider/plan pair.
+
+| Param | Required | Description |
+|---|---|---|
+| `planId` | yes | An id from `/api/insurance/payers/{id}/plans` |
+
+**404** if the provider doesn't exist. **400** if `planId` is missing or unknown.
+
+**Example**: `GET /api/providers/1/network-evidence?planId=1`
+```json
+{
+  "providerId": 1,
+  "planId": 1,
+  "planName": "DocFit Demo PPO (synthetic)",
+  "networkName": "DocFit Demo Network Directory (synthetic)",
+  "payerName": "DocFit Demo Network (synthetic test data)",
+  "status": "EVIDENCE_FOUND",
+  "freshness": "AGING",
+  "matchedAddressLine1": null,
+  "matchedCity": null,
+  "matchedStateCode": null,
+  "matchedPostalCode": null,
+  "matchMethod": "NPI_EXACT",
+  "sourceName": "DocFit synthetic demo evidence generator",
+  "sourceType": "MANUAL_DEMO_REFERENCE",
+  "synthetic": true,
+  "checkedAt": "2026-07-04T07:28:59.932518Z",
+  "firstSeenAt": "2026-08-16T07:28:59.942226Z",
+  "limitations": [
+    "Network directory participation may change and does not guarantee coverage or payment.",
+    "Confirm eligibility and benefits directly with your insurer before your visit.",
+    "Absence of evidence does not necessarily mean a provider is out of network -- directory data can be incomplete, stale, or specific to another location."
+  ]
+}
+```
+`status` is one of `EVIDENCE_FOUND`, `NO_EVIDENCE_FOUND`, `SOURCE_UNAVAILABLE`,
+`MATCH_AMBIGUOUS`, `NOT_CHECKED` -- `NO_EVIDENCE_FOUND` never means "out of network." `synthetic`
+is `true` only for the demo source; real sources would be `false`.
+
+### `GET /api/providers/search` -- `planId` param
+
+The existing search endpoint accepts an optional `planId`. When present, each result gets a
+compact `networkEvidence` summary (`status`, `freshness`, `planName`, `networkName`, `synthetic`,
+`checkedAt`) computed from locally stored evidence in one batched query -- never a live per-result
+external call. Omitting `planId` is fully backward compatible: every existing required field is
+unchanged, and `networkEvidence` is simply `null`. An unknown `planId` degrades gracefully
+(search still succeeds; every result's `networkEvidence` is `null`).
 
 ---
 
@@ -83,6 +166,7 @@ Searches providers by specialty and location.
 | `sort` | no | `distance` | `distance`, `name`, or `name-desc` |
 | `page` | no | `0` | Zero-based page index |
 | `size` | no | `20` | Page size |
+| `planId` | no | -- | An id from `/api/insurance/payers/{id}/plans`. See "Insurance network intelligence" below. |
 
 **Example**: `GET /api/providers/search?specialty=CARDIOLOGY&location=90802&radius=25&sort=distance&page=0&size=20`
 ```json
