@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ApiError, fetchPayers, fetchSpecialties, saveSearch, searchProviders } from '../api/client'
+import { ApiError, fetchPayers, fetchSpecialties, saveSearch, searchProviders, type PracticalFitFilters } from '../api/client'
 import type { PayerDto, ProviderSearchResultDto, SortOption, SpecialtyDto } from '../api/types'
 import About from '../components/About'
 import CompareBar from '../components/CompareBar'
@@ -93,6 +93,19 @@ function HomePage() {
   const payerId = searchParams.get('payerId') ?? ''
   const planId = searchParams.get('planId') ?? ''
 
+  const filters: PracticalFitFilters = useMemo(() => {
+    const providerType = searchParams.get('providerType')
+    const next: PracticalFitFilters = {}
+    if (providerType === 'INDIVIDUAL' || providerType === 'ORGANIZATION') {
+      next.providerType = providerType
+    }
+    if (searchParams.get('hasPhone') === 'true') next.hasPhone = true
+    if (searchParams.get('preciseLocationOnly') === 'true') next.preciseLocationOnly = true
+    if (searchParams.get('networkEvidenceFound') === 'true') next.networkEvidenceFound = true
+    if (searchParams.get('multipleLocations') === 'true') next.multipleLocations = true
+    return next
+  }, [searchParams])
+
   const hasSearch = Boolean(specialty) && Boolean(location || (lat && lng))
 
   // Returns a cancel function (same pattern as loadReferenceData above): if search params change
@@ -112,6 +125,7 @@ function HomePage() {
       lat: lat ? Number(lat) : undefined,
       lng: lng ? Number(lng) : undefined,
       planId: planId ? Number(planId) : undefined,
+      ...filters,
     })
       .then((response) => {
         if (cancelled) return
@@ -148,7 +162,7 @@ function HomePage() {
     return cleanup
     // Search re-runs only when the URL-derived search criteria actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [specialty, location, lat, lng, radius, sort, page, planId])
+  }, [specialty, location, lat, lng, radius, sort, page, planId, filters])
 
   async function handleSaveSearch() {
     setIsSavingSearch(true)
@@ -223,6 +237,22 @@ function HomePage() {
   function handlePageChange(nextPage: number) {
     const next = new URLSearchParams(searchParams)
     next.set('page', String(Math.max(0, nextPage)))
+    setSearchParams(next)
+  }
+
+  function handleFiltersChange(nextFilters: PracticalFitFilters) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('providerType')
+    next.delete('hasPhone')
+    next.delete('preciseLocationOnly')
+    next.delete('networkEvidenceFound')
+    next.delete('multipleLocations')
+    if (nextFilters.providerType) next.set('providerType', nextFilters.providerType)
+    if (nextFilters.hasPhone) next.set('hasPhone', 'true')
+    if (nextFilters.preciseLocationOnly) next.set('preciseLocationOnly', 'true')
+    if (nextFilters.networkEvidenceFound) next.set('networkEvidenceFound', 'true')
+    if (nextFilters.multipleLocations) next.set('multipleLocations', 'true')
+    next.set('page', '0')
     setSearchParams(next)
   }
 
@@ -334,6 +364,8 @@ function HomePage() {
           onSaveSearch={status === 'success' && isAuthenticated ? handleSaveSearch : undefined}
           isSavingSearch={isSavingSearch}
           searchSaved={searchSaved}
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
         />
       </main>
 
