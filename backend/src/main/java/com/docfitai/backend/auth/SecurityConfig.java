@@ -59,7 +59,11 @@ public class SecurityConfig {
                                 "/api/providers/**",
                                 "/api/locations/**")
                         .permitAll()
-                        .requestMatchers("/actuator/**")
+                        // Narrow on purpose: only the health probe is ever public. If
+                        // management.endpoints.web.exposure.include is ever widened (e.g. to
+                        // include env/beans/configprops), this rule must NOT accidentally expose
+                        // it -- see docs/threat-model.md ("Configuration leak").
+                        .requestMatchers("/actuator/health", "/actuator/health/**")
                         .permitAll()
                         .anyRequest()
                         .authenticated())
