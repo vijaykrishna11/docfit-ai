@@ -19,6 +19,7 @@ const sampleProvider: ProviderSearchResultDto = {
   taxonomyCode: '207RC0000X',
   specialtyDisplayName: 'Cardiovascular Disease Specialist',
   distanceMiles: 2.5,
+  networkEvidence: null,
 }
 
 describe('ProviderResults', () => {
@@ -58,5 +59,39 @@ describe('ProviderResults', () => {
     renderWithProviders(<ProviderResults status="success" results={[]} originLabel="Long Beach, CA" />)
 
     expect(screen.getByText(/no providers found/i)).toBeInTheDocument()
+  })
+
+  it('never renders an unqualified coverage claim as the evidence status label, in any status', () => {
+    // Scoped to the status label itself (not surrounding explanatory prose, where a phrase like
+    // "doesn't necessarily mean out of network" is correct, intentional hedging).
+    const bannedAsAClaim = /^covered$|^guaranteed/i
+    const statuses: Array<ProviderSearchResultDto['networkEvidence']> = [
+      { status: 'EVIDENCE_FOUND', freshness: 'FRESH', planName: 'Demo PPO', networkName: 'Demo Network', synthetic: true, checkedAt: new Date().toISOString() },
+      { status: 'NO_EVIDENCE_FOUND', freshness: null, planName: 'Demo PPO', networkName: 'Demo Network', synthetic: true, checkedAt: null },
+      { status: 'SOURCE_UNAVAILABLE', freshness: null, planName: 'Demo PPO', networkName: null, synthetic: false, checkedAt: null },
+    ]
+
+    for (const networkEvidence of statuses) {
+      const { unmount } = renderWithProviders(
+        <ProviderResults
+          status="success"
+          results={[{ ...sampleProvider, networkEvidence }]}
+          originLabel="Long Beach, CA"
+          planId={1}
+        />,
+      )
+      const labelText =
+        networkEvidence!.status === 'EVIDENCE_FOUND'
+          ? 'network evidence found'
+          : networkEvidence!.status === 'NO_EVIDENCE_FOUND'
+            ? 'no directory evidence found'
+            : 'verification source unavailable'
+      const labels = screen.getAllByText(new RegExp(labelText, 'i'))
+      expect(labels.length).toBeGreaterThan(0)
+      for (const label of labels) {
+        expect(label.textContent ?? '').not.toMatch(bannedAsAClaim)
+      }
+      unmount()
+    }
   })
 })

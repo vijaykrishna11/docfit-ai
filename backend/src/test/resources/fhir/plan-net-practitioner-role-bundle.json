@@ -1,0 +1,32 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "role-1",
+        "meta": { "lastUpdated": "2026-07-01T00:00:00Z" },
+        "extension": [
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/plannet-Network",
+            "valueReference": { "reference": "Organization/network-1" }
+          }
+        ],
+        "location": [{ "reference": "Location/loc-1" }]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Location",
+        "id": "loc-1",
+        "address": {
+          "line": ["200 Ocean Blvd"],
+          "city": "Long Beach",
+          "state": "CA",
+          "postalCode": "90802"
+        }
+      }
+    }
+  ]
+}
