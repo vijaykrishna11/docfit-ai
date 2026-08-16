@@ -95,44 +95,57 @@ function HomePage() {
 
   const hasSearch = Boolean(specialty) && Boolean(location || (lat && lng))
 
-  async function runSearch() {
+  // Returns a cancel function (same pattern as loadReferenceData above): if search params change
+  // again before this request resolves, the effect's cleanup marks it cancelled so an
+  // out-of-order/slow response can't overwrite the results of a newer search that already
+  // completed.
+  function runSearch(): () => void {
+    let cancelled = false
     setStatus('loading')
     setErrorMessage(undefined)
-    try {
-      const response = await searchProviders({
-        specialty,
-        radius,
-        sort,
-        page,
-        location: lat && lng ? undefined : location || undefined,
-        lat: lat ? Number(lat) : undefined,
-        lng: lng ? Number(lng) : undefined,
-        planId: planId ? Number(planId) : undefined,
+    searchProviders({
+      specialty,
+      radius,
+      sort,
+      page,
+      location: lat && lng ? undefined : location || undefined,
+      lat: lat ? Number(lat) : undefined,
+      lng: lng ? Number(lng) : undefined,
+      planId: planId ? Number(planId) : undefined,
+    })
+      .then((response) => {
+        if (cancelled) return
+        setResults(response.results)
+        setOriginLabel(response.originLabel)
+        setTotalElements(response.totalElements)
+        setTotalPages(response.totalPages)
+        setStatus('success')
       })
-      setResults(response.results)
-      setOriginLabel(response.originLabel)
-      setTotalElements(response.totalElements)
-      setTotalPages(response.totalPages)
-      setStatus('success')
-    } catch (error) {
-      setResults([])
-      setOriginLabel(null)
-      setTotalElements(0)
-      setTotalPages(0)
-      setStatus('error')
-      setErrorMessage(error instanceof ApiError ? error.message : UNREACHABLE_MESSAGE)
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setResults([])
+        setOriginLabel(null)
+        setTotalElements(0)
+        setTotalPages(0)
+        setStatus('error')
+        setErrorMessage(error instanceof ApiError ? error.message : UNREACHABLE_MESSAGE)
+      })
+    return () => {
+      cancelled = true
     }
   }
 
   useEffect(() => {
+    let cleanup: (() => void) | undefined
     if (hasSearch) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-param-change pattern
-      void runSearch()
+      cleanup = runSearch()
     } else {
       setStatus('idle')
       setResults([])
     }
     setSearchSaved(false)
+    return cleanup
     // Search re-runs only when the URL-derived search criteria actually change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specialty, location, lat, lng, radius, sort, page, planId])
@@ -221,7 +234,7 @@ function HomePage() {
   }
 
   function handleRetry() {
-    void runSearch()
+    runSearch()
   }
 
   async function handleShare() {
