@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { searchProviders } from './client'
+import { fetchSpecialties, searchProviders, setAccessToken, setRefreshHandler } from './client'
 
 describe('searchProviders', () => {
   afterEach(() => {
@@ -55,5 +55,41 @@ describe('searchProviders', () => {
     await expect(
       searchProviders({ specialty: 'CARDIOLOGY', location: '90815', radius: 25, sort: 'distance', page: 0 }),
     ).rejects.toThrow(/unable to reach the search service/i)
+  })
+})
+
+describe('401 refresh-and-retry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    setRefreshHandler(null)
+    setAccessToken(null)
+  })
+
+  it('shares one in-flight refresh across concurrent 401s instead of firing one per request', async () => {
+    // The refresh token is single-use/rotating server-side -- two independent refresh calls
+    // fired from two requests that both hit a 401 at once would race against the same cookie.
+    let fetchCallCount = 0
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      fetchCallCount += 1
+      // Calls 1-2 are each request's initial (expired-token) attempt; everything after is the
+      // post-refresh retry.
+      if (fetchCallCount <= 2) {
+        return { ok: false, status: 401, json: async () => ({}) }
+      }
+      return { ok: true, status: 200, json: async () => [] }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    let refreshCallCount = 0
+    setRefreshHandler(async () => {
+      refreshCallCount += 1
+      await Promise.resolve()
+      return 'new-access-token'
+    })
+
+    await Promise.all([fetchSpecialties(), fetchSpecialties()])
+
+    expect(refreshCallCount).toBe(1)
+    expect(fetchCallCount).toBe(4)
   })
 })

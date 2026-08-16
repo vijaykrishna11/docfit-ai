@@ -37,6 +37,13 @@ export class ApiError extends Error {
 // call site needing to know about the auth flow.
 let currentAccessToken: string | null = null
 let refreshHandler: (() => Promise<string | null>) | null = null
+// The refresh token is single-use/rotating (see AuthService.refresh) -- if two requests hit a
+// 401 at once (e.g. two parallel authenticated calls right as the access token expires), each
+// independently calling refreshHandler() would fire two concurrent /api/auth/refresh calls
+// against the same still-valid cookie, doubling refresh traffic and leaving one of the two new
+// sessions immediately orphaned. This memoizes the in-flight attempt so concurrent 401s share
+// one refresh and its result, clearing once it settles so the next real 401 starts a fresh one.
+let inFlightRefresh: Promise<string | null> | null = null
 
 export function setAccessToken(token: string | null) {
   currentAccessToken = token
@@ -44,6 +51,18 @@ export function setAccessToken(token: string | null) {
 
 export function setRefreshHandler(handler: (() => Promise<string | null>) | null) {
   refreshHandler = handler
+}
+
+function refreshAccessTokenOnce(): Promise<string | null> {
+  if (!refreshHandler) {
+    return Promise.resolve(null)
+  }
+  if (!inFlightRefresh) {
+    inFlightRefresh = refreshHandler().finally(() => {
+      inFlightRefresh = null
+    })
+  }
+  return inFlightRefresh
 }
 
 async function readServerMessage(response: Response): Promise<string | undefined> {
@@ -87,7 +106,7 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
   }
 
   if (response.status === 401 && !isRetry && !options.skipAuthRetry && refreshHandler) {
-    const refreshedToken = await refreshHandler()
+    const refreshedToken = await refreshAccessTokenOnce()
     if (refreshedToken) {
       return request<T>(path, options, true)
     }
