@@ -13,9 +13,12 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -46,6 +49,9 @@ public class ProviderSearchService {
     // precise Haversine calculation below). A generous approximation is fine because the exact
     // circle filter (radiusMiles) is re-applied in Java after this query returns.
     private static final double MILES_PER_DEGREE_LATITUDE = 69.0;
+    // Matches CoordinatePrecision.EXACT/ADDRESS_GEOCODE -- a real geocode, not a ZIP/city centroid
+    // approximation. Kept as plain strings (not the enum) since this DTO field is already a String.
+    private static final Set<String> PRECISE_COORDINATE_PRECISIONS = Set.of("EXACT", "ADDRESS_GEOCODE");
 
     private static final String MATCH_QUERY =
             """
@@ -169,6 +175,12 @@ public class ProviderSearchService {
                     Math.round(match.nearestDistance * 10.0) / 10.0));
         }
 
+        FilterResult filtered = applyPracticalFitFilters(withinRadius, query);
+        // Filters that actually ran return an immutable List (Stream.toList()) -- re-wrap in a
+        // mutable list unconditionally so the in-place .sort() below never throws
+        // UnsupportedOperationException, regardless of which filters (if any) were applied.
+        withinRadius = new ArrayList<>(filtered.results());
+
         Comparator<ProviderSearchResultDto> nameComparator =
                 Comparator.comparing(ProviderSearchService::displayName, String.CASE_INSENSITIVE_ORDER);
         if (SORT_NAME.equalsIgnoreCase(query.sort())) {
@@ -186,7 +198,7 @@ public class ProviderSearchService {
         int fromIndex = Math.min(safePage * safeSize, totalElements);
         int toIndex = Math.min(fromIndex + safeSize, totalElements);
         List<ProviderSearchResultDto> pageResults = withinRadius.subList(fromIndex, toIndex);
-        pageResults = attachNetworkEvidence(pageResults, query.planId());
+        pageResults = attachNetworkEvidence(pageResults, query.planId(), filtered.evidenceByProvider());
 
         return new ProviderSearchResponseDto(pageResults, safePage, safeSize, totalElements, totalPages, origin.label());
     }
@@ -196,19 +208,87 @@ public class ProviderSearchService {
      * lookup per provider (CLAUDE.md 89-91). Evidence is looked up against the specific location
      * each result is showing (CLAUDE.md 9). Omitting {@code planId} leaves every result's
      * networkEvidence field null rather than a fabricated status.
+     *
+     * @param alreadyComputed when the {@code networkEvidenceFound} filter was applied, evidence for
+     *     every surviving candidate was already fetched in one batch to decide who qualifies --
+     *     reused here instead of a second batched lookup for the same providers.
      */
-    private List<ProviderSearchResultDto> attachNetworkEvidence(List<ProviderSearchResultDto> pageResults, Long planId) {
+    private List<ProviderSearchResultDto> attachNetworkEvidence(
+            List<ProviderSearchResultDto> pageResults, Long planId, Map<Long, NetworkEvidenceSummaryDto> alreadyComputed) {
         if (planId == null || pageResults.isEmpty()) {
             return pageResults;
         }
-        Map<Long, Long> providerLocations = new HashMap<>();
-        for (ProviderSearchResultDto result : pageResults) {
-            providerLocations.put(result.id(), result.location() == null ? null : result.location().id());
+        Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider = alreadyComputed;
+        if (evidenceByProvider == null) {
+            Map<Long, Long> providerLocations = new HashMap<>();
+            for (ProviderSearchResultDto result : pageResults) {
+                providerLocations.put(result.id(), result.location() == null ? null : result.location().id());
+            }
+            evidenceByProvider = networkEvidenceService.summarizeForProviders(providerLocations, planId);
         }
-        Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider = networkEvidenceService.summarizeForProviders(providerLocations, planId);
+        Map<Long, NetworkEvidenceSummaryDto> finalEvidenceByProvider = evidenceByProvider;
         return pageResults.stream()
-                .map(result -> result.withNetworkEvidence(evidenceByProvider.get(result.id())))
+                .map(result -> result.withNetworkEvidence(finalEvidenceByProvider.get(result.id())))
                 .toList();
+    }
+
+    /**
+     * Applies the optional practical-fit filters (CLAUDE.md "Practical Fit Filter Bar") to the
+     * within-radius candidate set, before sorting/pagination. providerType/hasPhone/
+     * preciseLocationOnly are pure in-memory checks against data already fetched by MATCH_QUERY --
+     * no extra queries. multipleLocations and networkEvidenceFound each need one additional
+     * batched query (never one per provider) over the remaining candidates at that point.
+     */
+    private FilterResult applyPracticalFitFilters(List<ProviderSearchResultDto> candidates, ProviderSearchQuery query) {
+        if (query.providerType() != null) {
+            String wanted = query.providerType().toUpperCase(Locale.ROOT);
+            candidates = candidates.stream().filter(c -> wanted.equals(c.entityType())).toList();
+        }
+        if (Boolean.TRUE.equals(query.hasPhone())) {
+            candidates = candidates.stream()
+                    .filter(c -> c.location() != null && c.location().phone() != null && !c.location().phone().isBlank())
+                    .toList();
+        }
+        if (Boolean.TRUE.equals(query.preciseLocationOnly())) {
+            candidates = candidates.stream()
+                    .filter(c -> c.location() != null && PRECISE_COORDINATE_PRECISIONS.contains(c.location().coordinatePrecision()))
+                    .toList();
+        }
+        if (Boolean.TRUE.equals(query.multipleLocations()) && !candidates.isEmpty()) {
+            List<Long> candidateIds = candidates.stream().map(ProviderSearchResultDto::id).toList();
+            List<Long> multiLocationProviderIds = jdbcTemplate.query(
+                    "SELECT provider_id FROM provider_location WHERE provider_id IN (:ids) "
+                            + "AND address_purpose = 'LOCATION' GROUP BY provider_id HAVING COUNT(*) > 1",
+                    new MapSqlParameterSource("ids", candidateIds),
+                    (rs, rowNum) -> rs.getLong("provider_id"));
+            Set<Long> multiLocationSet = new HashSet<>(multiLocationProviderIds);
+            candidates = candidates.stream().filter(c -> multiLocationSet.contains(c.id())).toList();
+        }
+        Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider = null;
+        if (Boolean.TRUE.equals(query.networkEvidenceFound())) {
+            if (query.planId() == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "networkEvidenceFound filter requires a planId.");
+            }
+            Map<Long, Long> providerLocations = new HashMap<>();
+            for (ProviderSearchResultDto c : candidates) {
+                providerLocations.put(c.id(), c.location() == null ? null : c.location().id());
+            }
+            evidenceByProvider = candidates.isEmpty()
+                    ? Map.of()
+                    : networkEvidenceService.summarizeForProviders(providerLocations, query.planId());
+            Map<Long, NetworkEvidenceSummaryDto> finalEvidenceByProvider = evidenceByProvider;
+            candidates = candidates.stream()
+                    .filter(c -> {
+                        NetworkEvidenceSummaryDto evidence = finalEvidenceByProvider.get(c.id());
+                        return evidence != null && "EVIDENCE_FOUND".equals(evidence.status());
+                    })
+                    .toList();
+        }
+        return new FilterResult(candidates, evidenceByProvider);
+    }
+
+    private record FilterResult(List<ProviderSearchResultDto> results, Map<Long, NetworkEvidenceSummaryDto> evidenceByProvider) {
     }
 
     private static String displayName(ProviderSearchResultDto dto) {
@@ -329,7 +409,7 @@ public class ProviderSearchService {
                 nearestDistance = distance;
                 nearestLocation = new ProviderLocationDto(
                         locationId, addressLine1, addressLine2, city, stateCode, postalCode, phone, latitude, longitude,
-                        coordinatePrecision);
+                        coordinatePrecision, Math.round(distance * 10.0) / 10.0);
             }
         }
     }
