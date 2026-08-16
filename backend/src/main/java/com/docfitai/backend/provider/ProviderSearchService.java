@@ -35,6 +35,17 @@ public class ProviderSearchService {
     static final double EARTH_RADIUS_MILES = 3958.8;
     private static final String SORT_NAME = "name";
     private static final String SORT_NAME_DESC = "name-desc";
+    // Upper bounds only -- the existing "<= 0 -> default" clamps below already cover the lower
+    // end. Without these, a client-supplied radius/size has no ceiling: radius alone doesn't
+    // bound MATCH_QUERY's cost (see the bounding-box params added below, which do), and size
+    // alone controls how large a single response payload gets built and serialized.
+    static final double MAX_RADIUS_MILES = 250;
+    static final int MAX_PAGE_SIZE = 200;
+    // Approximate miles per degree of latitude; used only to size a superset bounding box for
+    // MATCH_QUERY, never to compute the actual distance shown to the user (that's still the
+    // precise Haversine calculation below). A generous approximation is fine because the exact
+    // circle filter (radiusMiles) is re-applied in Java after this query returns.
+    private static final double MILES_PER_DEGREE_LATITUDE = 69.0;
 
     private static final String MATCH_QUERY =
             """
@@ -48,6 +59,8 @@ public class ProviderSearchService {
             JOIN provider_location pl ON pl.provider_id = p.id AND pl.address_purpose = 'LOCATION'
             WHERE pt.taxonomy_code IN (:taxonomyCodes)
               AND pl.latitude IS NOT NULL AND pl.longitude IS NOT NULL
+              AND pl.latitude BETWEEN :minLat AND :maxLat
+              AND pl.longitude BETWEEN :minLng AND :maxLng
             """;
 
     private final SpecialtyRepository specialtyRepository;
@@ -68,8 +81,8 @@ public class ProviderSearchService {
 
     public ProviderSearchResponseDto search(ProviderSearchQuery query) {
         int safePage = Math.max(query.page(), 0);
-        int safeSize = query.size() <= 0 ? 20 : query.size();
-        double radiusMiles = query.radiusMiles() <= 0 ? 25 : query.radiusMiles();
+        int safeSize = query.size() <= 0 ? 20 : Math.min(query.size(), MAX_PAGE_SIZE);
+        double radiusMiles = query.radiusMiles() <= 0 ? 25 : Math.min(query.radiusMiles(), MAX_RADIUS_MILES);
 
         Specialty specialty = specialtyRepository
                 .findByCode(query.specialtyCode())
@@ -91,7 +104,21 @@ public class ProviderSearchService {
         // One entry per provider: identity fields, the best (primary-preferred) matching
         // taxonomy, and the nearest qualifying location seen so far.
         Map<Long, ProviderMatch> matchByProvider = new LinkedHashMap<>();
-        MapSqlParameterSource params = new MapSqlParameterSource("taxonomyCodes", taxonomyCodes);
+        // Superset bounding box so MATCH_QUERY doesn't have to load every matching-specialty
+        // provider nationwide before filtering by distance in Java -- without this, a common
+        // specialty (e.g. family medicine, ~200k+ NPIs nationally) would pull its entire
+        // nationwide result set into memory on every search, regardless of radius. The exact
+        // circle (radiusMiles) is still enforced below via Haversine; this box only has to be a
+        // superset, not exact.
+        double latDeltaDegrees = radiusMiles / MILES_PER_DEGREE_LATITUDE;
+        double milesPerDegreeLongitude =
+                MILES_PER_DEGREE_LATITUDE * Math.max(Math.cos(Math.toRadians(origin.latitude())), 0.01);
+        double lngDeltaDegrees = radiusMiles / milesPerDegreeLongitude;
+        MapSqlParameterSource params = new MapSqlParameterSource("taxonomyCodes", taxonomyCodes)
+                .addValue("minLat", origin.latitude() - latDeltaDegrees)
+                .addValue("maxLat", origin.latitude() + latDeltaDegrees)
+                .addValue("minLng", origin.longitude() - lngDeltaDegrees)
+                .addValue("maxLng", origin.longitude() + lngDeltaDegrees);
         jdbcTemplate.query(MATCH_QUERY, params, rs -> {
             long providerId = rs.getLong("id");
             double distance = haversineMiles(

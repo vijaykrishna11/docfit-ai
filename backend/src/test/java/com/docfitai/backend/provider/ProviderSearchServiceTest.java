@@ -156,6 +156,21 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
     }
 
     @Test
+    void oversizedRadiusAndPageSizeAreClampedRatherThanHonoredVerbatim() {
+        String clampNpi = "1000000013";
+        insertProvider(clampNpi, "Clamp", "Test", "90802", "33.770000", "-118.191000");
+        insertTaxonomy(clampNpi, "207RC0000X", true);
+
+        // A client asking for an enormous radius/page size must not force the server to load or
+        // return an unbounded result set -- see MAX_RADIUS_MILES / MAX_PAGE_SIZE.
+        ProviderSearchResponseDto response = providerSearchService.search(
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 999_999, "distance", 0, 999_999, null));
+
+        assertThat(response.size()).isEqualTo(ProviderSearchService.MAX_PAGE_SIZE);
+        assertThat(response.results()).extracting(ProviderSearchResultDto::npiNumber).contains(clampNpi);
+    }
+
+    @Test
     void unknownLocationIsRejectedWithBadRequest() {
         assertThatThrownBy(() -> providerSearchService.search(
                         new ProviderSearchQuery("CARDIOLOGY", null, "Nowhereville", null, null, 25, "distance", 0, 20, null)))
