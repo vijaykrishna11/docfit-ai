@@ -8,8 +8,11 @@ import type {
   ProviderDetailDto,
   ProviderNameSearchResultDto,
   ProviderSearchResponseDto,
+  ReportTypeValue,
   SavedProviderDto,
   SavedSearchDto,
+  ShortlistDetailDto,
+  ShortlistDto,
   SortOption,
   SpecialtyDto,
   UserDto,
@@ -165,7 +168,16 @@ export function fetchProviderNetworkEvidence(
   return request<NetworkEvidenceDetailDto>(`/api/providers/${providerId}/network-evidence?${params.toString()}`)
 }
 
-export interface ProviderSearchParams {
+/** Practical-fit filters: all optional, all off (undefined) by default -- never a default that silently narrows results. */
+export interface PracticalFitFilters {
+  providerType?: 'INDIVIDUAL' | 'ORGANIZATION'
+  hasPhone?: boolean
+  preciseLocationOnly?: boolean
+  networkEvidenceFound?: boolean
+  multipleLocations?: boolean
+}
+
+export interface ProviderSearchParams extends PracticalFitFilters {
   specialty: string
   location?: string
   lat?: number
@@ -194,6 +206,21 @@ export function searchProviders(searchParams: ProviderSearchParams): Promise<Pro
   }
   if (searchParams.planId != null) {
     params.set('planId', String(searchParams.planId))
+  }
+  if (searchParams.providerType) {
+    params.set('providerType', searchParams.providerType)
+  }
+  if (searchParams.hasPhone) {
+    params.set('hasPhone', 'true')
+  }
+  if (searchParams.preciseLocationOnly) {
+    params.set('preciseLocationOnly', 'true')
+  }
+  if (searchParams.networkEvidenceFound) {
+    params.set('networkEvidenceFound', 'true')
+  }
+  if (searchParams.multipleLocations) {
+    params.set('multipleLocations', 'true')
   }
   return request<ProviderSearchResponseDto>(`/api/providers/search?${params.toString()}`)
 }
@@ -304,4 +331,46 @@ export function renameSavedSearch(id: number, name: string): Promise<SavedSearch
 
 export function removeSavedSearch(id: number): Promise<void> {
   return request<void>(`/api/saved-searches/${id}`, { method: 'DELETE' })
+}
+
+// ---------- Shortlists ----------
+
+export function fetchShortlists(): Promise<ShortlistDto[]> {
+  return request<ShortlistDto[]>('/api/account/shortlists')
+}
+
+export function createShortlist(name: string): Promise<ShortlistDto> {
+  return request<ShortlistDto>('/api/account/shortlists', { method: 'POST', body: { name } })
+}
+
+export function fetchShortlistDetail(id: number): Promise<ShortlistDetailDto> {
+  return request<ShortlistDetailDto>(`/api/account/shortlists/${id}`)
+}
+
+export function renameShortlist(id: number, name: string): Promise<ShortlistDto> {
+  return request<ShortlistDto>(`/api/account/shortlists/${id}`, { method: 'PATCH', body: { name } })
+}
+
+export function deleteShortlist(id: number): Promise<void> {
+  return request<void>(`/api/account/shortlists/${id}`, { method: 'DELETE' })
+}
+
+export function addProviderToShortlist(shortlistId: number, providerId: number): Promise<void> {
+  return request<void>(`/api/account/shortlists/${shortlistId}/providers/${providerId}`, { method: 'POST' })
+}
+
+export function removeProviderFromShortlist(shortlistId: number, providerId: number): Promise<void> {
+  return request<void>(`/api/account/shortlists/${shortlistId}/providers/${providerId}`, { method: 'DELETE' })
+}
+
+// ---------- Directory-data correction reports ----------
+
+export interface SubmitReportParams {
+  reportType: ReportTypeValue
+  providerLocationId?: number
+  comment?: string
+}
+
+export function submitProviderDataReport(providerId: number, params: SubmitReportParams): Promise<{ id: number }> {
+  return request<{ id: number }>(`/api/providers/${providerId}/reports`, { method: 'POST', body: params })
 }

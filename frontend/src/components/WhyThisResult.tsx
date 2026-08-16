@@ -10,6 +10,8 @@ interface WhyThisResultProps {
   originLabel?: string | null
   networkEvidence?: NetworkEvidenceSummaryDto | null
   coordinatePrecision?: string | null
+  /** Practical-fit fact (CLAUDE.md "Practical Fit Summary") -- undefined when not applicable (e.g. no location context at all). */
+  hasPhone?: boolean
 }
 
 /**
@@ -24,6 +26,7 @@ function WhyThisResult({
   originLabel,
   networkEvidence,
   coordinatePrecision,
+  hasPhone,
 }: WhyThisResultProps) {
   const isApproximate = coordinatePrecision === 'ZIP_CENTROID' || coordinatePrecision === 'CITY_CENTROID'
   return (
@@ -59,6 +62,14 @@ function WhyThisResult({
             <InfoIcon width={14} height={14} />
             <span>
               <strong>Location precision:</strong> ZIP-level approximate, not this office's exact address
+            </span>
+          </li>
+        )}
+        {hasPhone != null && (
+          <li className={hasPhone ? '' : 'why-this-result-info'}>
+            {hasPhone ? <CheckIcon width={14} height={14} /> : <InfoIcon width={14} height={14} />}
+            <span>
+              <strong>Phone:</strong> {hasPhone ? 'Available in the source record' : 'Not listed in the source record'}
             </span>
           </li>
         )}

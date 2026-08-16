@@ -2646,3 +2646,334 @@ button.area-zip-chip {
   display: flex;
   gap: 10px;
 }
+
+/* ---------- Care Discovery V3: map + list/map layout ---------- */
+
+.results-view-toggle {
+  display: none;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+
+  @media (max-width: 900px) {
+    display: flex;
+  }
+}
+
+.view-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.view-toggle-button.is-active {
+  background: var(--surface);
+  color: var(--text-h);
+  box-shadow: var(--shadow-sm);
+}
+
+.skip-map-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+
+  &:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    clip: auto;
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--primary);
+    color: var(--on-primary);
+    font-size: 13px;
+    font-weight: 600;
+  }
+}
+
+.results-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.results-list-pane {
+  flex: 0 0 45%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.results-map-pane {
+  flex: 1 1 55%;
+  min-width: 0;
+  position: sticky;
+  top: 84px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .results-layout {
+    flex-direction: column;
+  }
+  .results-list-pane,
+  .results-map-pane {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .results-map-pane {
+    position: static;
+  }
+  .results-list-pane[data-mobile-hidden='true'],
+  .results-map-pane[data-mobile-hidden='true'] {
+    display: none;
+  }
+}
+
+.results-map {
+  width: 100%;
+  height: 520px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg);
+
+  @media (max-width: 900px) {
+    height: 60svh;
+  }
+}
+
+.map-precision-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.map-loading-skeleton {
+  width: 100%;
+  height: 520px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--bg) 25%, var(--border) 50%, var(--bg) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* Leaflet's default marker/popup chrome intentionally not overridden beyond these -- custom
+   DivIcons below replace the pin image entirely, precision-aware per CLAUDE.md "Map Accuracy Rules". */
+.map-marker-icon {
+  display: block;
+  border-radius: 50%;
+  border: 2px solid var(--on-primary);
+  box-shadow: 0 1px 4px rgba(16, 36, 62, 0.35);
+}
+
+.map-marker-precise {
+  background: var(--primary);
+}
+
+.map-marker-approximate {
+  background: transparent;
+  border: 2px dashed var(--primary);
+}
+
+.map-marker-selected {
+  box-shadow: 0 0 0 4px var(--primary-bg), 0 1px 4px rgba(16, 36, 62, 0.35);
+}
+
+.map-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.map-popup-name {
+  font-weight: 700;
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.map-popup-specialty {
+  font-size: 12.5px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.map-popup-address,
+.map-popup-phone {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.map-popup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.map-popup-actions .ghost-button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* ---------- Care Discovery V3: practical-fit filter bar ---------- */
+
+.practical-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.practical-filter-trigger-wrap {
+  position: relative;
+  align-self: flex-start;
+}
+
+.practical-filter-trigger.is-active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.filter-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 4px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.practical-filter-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+
+  @media (max-width: 640px) {
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    width: 100%;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 80svh;
+    overflow-y: auto;
+  }
+}
+
+.practical-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.practical-filter-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.practical-filter-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.practical-filter-radio,
+.practical-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.practical-filter-checkbox.is-disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.practical-filter-panel-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.practical-filter-chips {
+  margin: 0;
+}
+
+/* ---------- Care Discovery V3: card additions ---------- */
+
+.provider-card-heading-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.multi-location-chip {
+  background: var(--secondary-bg);
+  color: var(--secondary);
+}
+
+.avatar-organization {
+  border-radius: var(--radius-sm);
+  color: var(--secondary);
+  background: var(--secondary-bg);
+}
+
+.provider-card.is-map-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-bg);
+}
+
+.zero-result-recovery {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+}

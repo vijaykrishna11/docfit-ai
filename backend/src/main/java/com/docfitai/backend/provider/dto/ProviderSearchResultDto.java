@@ -17,9 +17,10 @@ public record ProviderSearchResultDto(
         String specialtyDisplayName,
         ProviderLocationDto location,
         double distanceMiles,
-        NetworkEvidenceSummaryDto networkEvidence) {
+        NetworkEvidenceSummaryDto networkEvidence,
+        int locationCount) {
 
-    /** Convenience constructor for call sites that don't have a plan selected -- networkEvidence is omitted (null), not a fabricated status. */
+    /** Convenience constructor for call sites that don't have a plan selected -- networkEvidence is omitted (null), not a fabricated status. locationCount defaults to 1 (unknown/not looked up), corrected via withLocationCount once the batched lookup runs. */
     public ProviderSearchResultDto(
             Long id,
             String npiNumber,
@@ -31,12 +32,19 @@ public record ProviderSearchResultDto(
             String specialtyDisplayName,
             ProviderLocationDto location,
             double distanceMiles) {
-        this(id, npiNumber, entityType, firstName, lastName, organizationName, taxonomyCode, specialtyDisplayName, location, distanceMiles, null);
+        this(id, npiNumber, entityType, firstName, lastName, organizationName, taxonomyCode, specialtyDisplayName, location, distanceMiles, null, 1);
     }
 
     public ProviderSearchResultDto withNetworkEvidence(NetworkEvidenceSummaryDto evidence) {
         return new ProviderSearchResultDto(
                 id, npiNumber, entityType, firstName, lastName, organizationName, taxonomyCode, specialtyDisplayName, location,
-                distanceMiles, evidence);
+                distanceMiles, evidence, locationCount);
+    }
+
+    /** CLAUDE.md "Multi-Location Discovery": how many practice locations this provider has in total, not just the one shown here. */
+    public ProviderSearchResultDto withLocationCount(int newLocationCount) {
+        return new ProviderSearchResultDto(
+                id, npiNumber, entityType, firstName, lastName, organizationName, taxonomyCode, specialtyDisplayName, location,
+                distanceMiles, networkEvidence, newLocationCount);
     }
 }

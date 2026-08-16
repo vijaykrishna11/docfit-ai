@@ -10,7 +10,7 @@ import {
   providerDisplayName,
   telHref,
 } from '../utils/providerDisplay'
-import { BadgeIcon, CheckIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
+import { BadgeIcon, BuildingIcon, CheckIcon, DirectionsIcon, LocationIcon, PhoneIcon } from './icons'
 import NetworkEvidenceBadge from './NetworkEvidenceBadge'
 import SaveProviderButton from './SaveProviderButton'
 import WhyThisResult from './WhyThisResult'
@@ -23,27 +23,38 @@ interface ProviderCardProps {
   entranceIndex?: number
   originLabel?: string | null
   planId?: number
+  /** Map/list sync (CLAUDE.md "Map Marker Interaction"): clicking a card highlights its map marker. Optional -- only wired when a map is actually showing. */
+  onSelect?: () => void
+  isSelected?: boolean
 }
 
-function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: ProviderCardProps) {
-  const { isSelected, toggle, isFull } = useCompare()
+function ProviderCard({ provider, entranceIndex = 0, originLabel, planId, onSelect, isSelected: isMapSelected }: ProviderCardProps) {
+  const { isSelected: isCompareSelected, toggle, isFull } = useCompare()
   const name = providerDisplayName(provider)
   const { line1, line2 } = formattedAddress(provider.location)
-  const selected = isSelected(provider.id)
+  const selected = isCompareSelected(provider.id)
   const disableCompareToggle = !selected && isFull
+  const isOrganization = provider.entityType === 'ORGANIZATION'
   const style = {
     '--entrance-delay': `${Math.min(entranceIndex, MAX_STAGGER_INDEX) * STAGGER_STEP_MS}ms`,
   } as CSSProperties
 
   return (
-    <li className={`provider-card${selected ? ' is-selected' : ''}`} style={style}>
+    <li
+      className={`provider-card${selected ? ' is-selected' : ''}${isMapSelected ? ' is-map-selected' : ''}`}
+      style={style}
+      onClick={onSelect}
+    >
       <div className="provider-card-top">
-        <div className="avatar" aria-hidden="true">
-          {initialsFor(name)}
+        <div className={`avatar${isOrganization ? ' avatar-organization' : ''}`} aria-hidden="true">
+          {isOrganization ? <BuildingIcon width={18} height={18} /> : initialsFor(name)}
         </div>
         <div className="provider-card-heading">
           <h3>{name}</h3>
-          <span className="specialty-badge">{provider.specialtyDisplayName}</span>
+          <div className="provider-card-heading-badges">
+            <span className="specialty-badge">{provider.specialtyDisplayName}</span>
+            {provider.locationCount > 1 && <span className="chip multi-location-chip">{provider.locationCount} practice locations</span>}
+          </div>
         </div>
         <div className="provider-card-top-actions">
           <span className="distance-badge">
@@ -88,6 +99,7 @@ function ProviderCard({ provider, entranceIndex = 0, originLabel, planId }: Prov
           originLabel={originLabel}
           networkEvidence={provider.networkEvidence}
           coordinatePrecision={provider.location.coordinatePrecision}
+          hasPhone={Boolean(provider.location.phone)}
         />
       </div>
 

@@ -276,3 +276,66 @@ export function MapPinIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function BuildingIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="5" y="3.5" width="10" height="17" rx="1" />
+      <path d="M15 9h4v11.5H5" />
+      <path d="M8 7.5h1M11 7.5h1M8 11h1M11 11h1M8 14.5h1M11 14.5h1" />
+    </svg>
+  )
+}
+
+export function FilterIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 5h16M7 12h10M10.5 19h3" />
+    </svg>
+  )
+}
+
+export function ListIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 6h10M9 12h10M9 18h10" />
+      <circle cx="5" cy="6" r="1" />
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="5" cy="18" r="1" />
+    </svg>
+  )
+}
+
+export function MapIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z" />
+      <path d="M9 4v14M15 6v14" />
+    </svg>
+  )
+}
+
+export function FlagIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 21V4" />
+      <path d="M6 4.5h11l-2.8 3.5L17 11.5H6" />
+    </svg>
+  )
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 7h14M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M8 7l1 13h6l1-13" />
+    </svg>
+  )
+}
+
+export function FolderIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18Z" />
+    </svg>
+  )
+}

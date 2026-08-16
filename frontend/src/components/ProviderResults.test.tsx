@@ -27,6 +27,7 @@ const sampleProvider: ProviderSearchResultDto = {
   specialtyDisplayName: 'Cardiovascular Disease Specialist',
   distanceMiles: 2.5,
   networkEvidence: null,
+  locationCount: 1,
 }
 
 describe('ProviderResults', () => {

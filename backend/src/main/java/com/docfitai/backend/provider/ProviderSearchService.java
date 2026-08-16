@@ -199,8 +199,32 @@ public class ProviderSearchService {
         int toIndex = Math.min(fromIndex + safeSize, totalElements);
         List<ProviderSearchResultDto> pageResults = withinRadius.subList(fromIndex, toIndex);
         pageResults = attachNetworkEvidence(pageResults, query.planId(), filtered.evidenceByProvider());
+        pageResults = attachLocationCounts(pageResults);
 
         return new ProviderSearchResponseDto(pageResults, safePage, safeSize, totalElements, totalPages, origin.label());
+    }
+
+    /**
+     * Batched, single-query location-count lookup for the page actually being returned (CLAUDE.md
+     * "Multi-Location Discovery") -- never one query per provider. A provider whose count is only
+     * looked up this way and never returned defaults to 1 via the DTO's convenience constructor,
+     * which undercounts rather than overclaims -- the multi-location UI treats "count > 1" as the
+     * signal, so an unreached default of 1 simply shows no badge, never a wrong one.
+     */
+    private List<ProviderSearchResultDto> attachLocationCounts(List<ProviderSearchResultDto> pageResults) {
+        if (pageResults.isEmpty()) {
+            return pageResults;
+        }
+        List<Long> providerIds = pageResults.stream().map(ProviderSearchResultDto::id).toList();
+        Map<Long, Integer> countsByProvider = new HashMap<>();
+        jdbcTemplate.query(
+                "SELECT provider_id, COUNT(*) AS location_count FROM provider_location "
+                        + "WHERE provider_id IN (:ids) AND address_purpose = 'LOCATION' GROUP BY provider_id",
+                new MapSqlParameterSource("ids", providerIds),
+                (rs, rowNum) -> countsByProvider.put(rs.getLong("provider_id"), rs.getInt("location_count")));
+        return pageResults.stream()
+                .map(result -> result.withLocationCount(countsByProvider.getOrDefault(result.id(), 1)))
+                .toList();
     }
 
     /**

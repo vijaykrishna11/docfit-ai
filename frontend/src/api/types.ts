@@ -64,6 +64,9 @@ export interface NetworkEvidenceDetailDto {
 
 export type ProviderEntityTypeValue = 'INDIVIDUAL' | 'ORGANIZATION'
 
+/** Precise geocode -- a normal map pin is appropriate. */
+export const PRECISE_COORDINATE_PRECISIONS = new Set(['EXACT', 'ADDRESS_GEOCODE'])
+
 /** {@code coordinatePrecision} is truthful -- ZIP_CENTROID means an approximate ZIP-code lookup, never a real address geocode. */
 export interface ProviderLocationDto {
   id: number
@@ -76,6 +79,8 @@ export interface ProviderLocationDto {
   latitude: number | null
   longitude: number | null
   coordinatePrecision: string
+  /** Null whenever no search origin applies (e.g. the saved-providers list) -- never a fabricated distance. */
+  distanceMiles?: number | null
 }
 
 /** One provider per result, attached to its single nearest qualifying practice location (never repeated per office). */
@@ -91,6 +96,8 @@ export interface ProviderSearchResultDto {
   location: ProviderLocationDto
   distanceMiles: number
   networkEvidence: NetworkEvidenceSummaryDto | null
+  /** Total practice locations this provider has, not just the one shown here (CLAUDE.md "Multi-Location Discovery"). */
+  locationCount: number
 }
 
 export interface ProviderSearchResponseDto {
@@ -170,6 +177,43 @@ export interface SavedProviderDto {
   organizationName: string | null
   location: ProviderLocationDto | null
 }
+
+export interface ShortlistDto {
+  id: number
+  name: string
+  providerCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ShortlistProviderDto {
+  providerId: number
+  addedAt: string
+  npiNumber: string
+  entityType: ProviderEntityTypeValue
+  firstName: string | null
+  lastName: string | null
+  organizationName: string | null
+  location: ProviderLocationDto | null
+}
+
+export interface ShortlistDetailDto {
+  id: number
+  name: string
+  providers: ShortlistProviderDto[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type ReportTypeValue =
+  | 'WRONG_ADDRESS'
+  | 'WRONG_PHONE_NUMBER'
+  | 'PROVIDER_NOT_AT_LOCATION'
+  | 'NAME_APPEARS_INCORRECT'
+  | 'SPECIALTY_APPEARS_INCORRECT'
+  | 'DUPLICATE_PROVIDER_OR_LOCATION'
+  | 'INSURANCE_INFO_APPEARS_INCORRECT'
+  | 'OTHER'
 
 export interface SavedSearchDto {
   id: number

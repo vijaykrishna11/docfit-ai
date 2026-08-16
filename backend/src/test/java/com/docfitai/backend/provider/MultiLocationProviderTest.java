@@ -58,6 +58,7 @@ class MultiLocationProviderTest extends PostgresIntegrationSupport {
         ProviderSearchResultDto match = matches.get(0);
         assertThat(match.location().addressLine1()).isEqualTo("1 Near St");
         assertThat(match.distanceMiles()).isLessThan(5.0);
+        assertThat(match.locationCount()).isEqualTo(2);
 
         // Provider detail lists the other office separately, not duplicated into the selected one.
         ProviderDetailDto detail = providerDetailService.getById(providerId, "90802", null, null, null);
