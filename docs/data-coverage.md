@@ -9,93 +9,75 @@ this and larger simulated scale).
 CLAUDE.md's own principle for this document: *"DocFit should not look larger than it really is. If
 we have 500 providers, say 500. If we cover Long Beach, say Long Beach."*
 
-## Snapshot (this phase, after the real bounded NPPES re-import)
+## Snapshot (LA County Expansion V5.1, after the real bounded 30-ZIP NPPES import)
 
 | Metric | Count |
 |---|---|
-| Providers | 582 (271 organizations, 311 individuals) |
-| Practice locations | 835 |
-| Specialty categories | 19 |
+| Providers | 5,854 (1,898 organizations, 3,956 individuals) |
+| Practice locations | 8,095 |
+| Specialty categories | 19 (all non-zero) |
 | NUCC taxonomy codes mapped | 27 |
-| Geography reference rows (`zip_geography`) | 6 |
-| Counties represented | 1 (Los Angeles) |
+| Geography reference rows (`zip_geography`) | 295 (real, source-verified LA County ZCTAs -- see `docs/la-county-geography-sources.md`) |
+| `zip_geography` rows with at least one provider location | 248 of 295 |
+| Counties represented (geography reference) | 1 (Los Angeles) |
+| ZIPs directly queried against NPPES this phase | 30 (see `docs/la-county-provider-import.md`) |
 
-## Geographic coverage: Long Beach-area only
+## Geographic coverage: real LA County reference geography, bounded provider data
 
-**Actually loaded**: 6 ZIP codes in and immediately around Long Beach, California (90802, 90803,
-90806, 90815, Lakewood 90712, Signal Hill 90755) -- all within Los Angeles County. This is the same
-small demo footprint the product has had since the original TODAY-MVP phase; this phase did not
-expand geographic coverage, only what's *findable* within that same footprint (specialty
-breadth) and what's *ready* to expand it (architecture, documented below).
+**Reference geography loaded**: 295 real ZIP Code Tabulation Areas (ZCTAs) whose primary county is
+Los Angeles, sourced directly from U.S. Census Bureau files (`docs/la-county-geography-sources.md`).
+This is a large, honest step up from the original 6-ZIP demo footprint, but it is reference
+geography, not provider data -- see the next paragraph.
 
-**Not loaded**: the rest of Los Angeles County (dozens more ZIPs), the rest of Southern California,
-and the rest of California. No claim is made anywhere in the product about coverage beyond the 6
-ZIPs above.
+**Provider data actually loaded**: NPPES was directly queried for only 30 of those 295 ZIPs, chosen
+for geographic breadth across the county (South Bay, Westside, San Gabriel Valley, San Fernando
+Valley, Antelope Valley, Gateway Cities -- full list in `docs/la-county-provider-import.md`). The
+resulting provider records' own reported `practiceLocations` (real additional offices) happen to
+land in 248 of the 295 loaded ZIPs, but **only the 30 queried ZIPs received a direct, deliberate
+search** -- the wider location footprint is a byproduct of genuine multi-location provider data,
+not a claim that all 295 ZIPs were comprehensively searched. Do not read "248 ZIPs have at least
+one location" as "LA County provider coverage" -- most of those 248 have only the handful of
+locations that happened to be reported by a provider matched from one of the 30 queried ZIPs, not
+a real search of that ZIP's own provider population.
+
+**Not loaded**: the remaining 265 of 295 loaded-geography ZIPs have never been directly queried;
+the rest of Southern California and the rest of California remain entirely out of scope (deliberately
+deferred -- see "Readiness labels," below).
 
 ## Specialty coverage: real counts, this run
 
 Distinct providers per specialty category, counted directly from the database (not location rows,
-not taxonomy rows):
-
-| Specialty | Providers |
-|---|---|
-| Psychiatry / Mental Health | 309 |
-| Primary Care | 158 |
-| Pediatrics | 41 |
-| Physical Medicine & Rehabilitation | 18 |
-| Cardiology | 12 |
-| General Surgery | 12 |
-| Ophthalmology | 11 |
-| Orthopedics | 9 |
-| Obstetrics & Gynecology | 9 |
-| Urology | 7 |
-| Dermatology | 6 |
-| Neurology | 6 |
-| Pulmonology | 5 |
-| Nephrology | 4 |
-| Gastroenterology | 3 |
-| Endocrinology | 2 |
-| Otolaryngology / ENT | 1 |
-| Rheumatology | 1 |
-| Allergy & Immunology | 1 |
-
-13 of the 19 categories have at least 5 real providers within the current 6-ZIP footprint; 3
-(Otolaryngology, Rheumatology, Allergy & Immunology) have exactly 1. This is an honest reflection
-of a genuinely small demo dataset, not a data-quality problem -- these specialties are inherently
-less common per capita than Primary Care or Psychiatry, and a 6-ZIP sample is small. A live
-provider search for one of these categories within a tight radius may legitimately return zero or
-one result today; the zero-result recovery UX (Care Discovery V3) handles this honestly rather
-than hiding it.
+not taxonomy rows) -- see `docs/la-county-provider-import.md` for the full current table. All 19
+categories now have real, non-zero data (Allergy & Immunology is the smallest at 17; Psychiatry /
+Mental Health the largest at 3,301) -- a meaningful improvement over the prior 6-ZIP snapshot, where
+3 categories had exactly 1 provider.
 
 ## Readiness labels (CLAUDE.md "Honest Readiness Labels")
 
 | | Architecture | Data actually loaded |
 |---|---|---|
-| **LA County** (all of it) | **YES** -- `NppesImportRunner` already fetches by ZIP + entity type + reads its taxonomy allowlist dynamically from `npi_taxonomy`; adding more LA County ZIPs to `zip_geography` and re-running the import needs zero code changes. | **NO** -- only 6 of LA County's ~300 ZIP codes are loaded. |
-| **California** (statewide) | **PARTIAL** -- the same import mechanism works for any CA ZIP, but `zip_geography` has no bulk California ZCTA import wired up yet (see "If a larger import is ever needed," below); county reference data exists for exactly 1 county. | **NO**. |
+| **LA County** (all of it) | **YES** -- `NppesImportRunner` already fetches by ZIP + entity type + reads its taxonomy allowlist dynamically from `npi_taxonomy`; querying more of the 295 already-loaded LA County ZIPs needs zero code changes, only a longer `DOCFIT_NPPES_IMPORT_ZIP_CODES` list. | **PARTIAL** -- reference geography for all 295 loaded ZCTAs exists, but only 30 of them were directly queried for providers. This is real, meaningful progress over the prior 6-ZIP/NO state, not full county coverage. |
+| **California** (statewide) | **PARTIAL** -- the same import mechanism works for any CA ZIP, but `zip_geography` has no bulk California ZCTA import wired up yet; county reference data exists for exactly 1 county (Los Angeles). | **NO**. |
 
 Do not read "architecture: YES" as "ready to flip a switch with no further work" -- it means the
-*code path* that would consume more ZIPs already exists and was proven this phase (the specialty
-expansion's real re-import used the exact same mechanism), not that scaling to hundreds of ZIPs is
-risk-free without also revisiting rate-limiting/pacing toward NPPES and reviewing performance at
-that data volume (see `docs/geospatial-scaling.md`'s 10,000-row synthetic benchmark for a
-realistic proxy of that scale, not the real thing).
+*code path* that would consume more ZIPs already exists and was proven this phase (a real 30-ZIP,
+146-request, 5,272-provider-created run), not that scaling to hundreds of ZIPs is risk-free without
+also revisiting pacing toward NPPES and reviewing performance at that data volume (see
+`docs/geospatial-scaling.md`).
 
 ## If a larger import is ever needed
 
-1. **Geography first.** Populate `zip_geography` with a real ZCTA-based reference set for the
-   target area (LA County or statewide) from the U.S. Census Bureau (`docs/provider-source-research.md`
-   discusses Census as the right authoritative source; no bulk import of it was built this phase --
-   `zip_geography` today is still the same 6 hand-curated demo rows, now with a `county` column
-   added but not yet populated at scale).
-2. **Run the NPPES importer** (`./mvnw spring-boot:run -Dspring-boot.run.profiles=import`) against
-   the expanded ZIP set. No code change needed -- verified this phase by re-running the exact same
-   importer after only adding new taxonomy codes, and watching it pick up 90 new providers with no
-   changes to `NppesImportRunner` itself.
+1. **Geography is already loaded for LA County.** All 295 real LA County ZCTAs are in
+   `zip_geography` (`docs/la-county-geography-sources.md`) -- no further geography work needed for
+   an LA-County-scale expansion. Statewide California would still need a new bulk geography import.
+2. **Run the NPPES importer** (`./mvnw spring-boot:run -Dspring-boot.run.profiles=import`) with a
+   longer `DOCFIT_NPPES_IMPORT_ZIP_CODES` list drawn from the already-loaded 295 ZIPs. No code
+   change needed -- verified this phase with a real 30-ZIP run.
 3. **Run the data quality report** (`ProviderDataQualityService`, runs automatically after every
-   import) and review any `ERROR`-severity findings before considering the import "done."
-4. **Re-measure search performance** at the new real row count -- do not assume the 10,000-row
-   synthetic benchmark's numbers transfer exactly; re-run `EXPLAIN ANALYZE` against the real data.
+   import) and review any `ERROR`-severity findings before considering the import "done." This
+   phase's run: 0 errors, 0 warnings.
+4. **Re-measure search performance** at the new real row count -- do not assume a synthetic
+   benchmark's numbers transfer exactly; re-run `EXPLAIN ANALYZE` against the real data.
 
 ## What this document is not
 
