@@ -25,6 +25,47 @@ export interface SearchFormInitialValues {
 
 const RADIUS_OPTIONS = [5, 10, 25, 50] as const
 
+// Presentational grouping only -- the specialty list itself (codes/names/descriptions) always
+// comes from the API, never duplicated here (CLAUDE.md "Shared Specialty Type"). A code with no
+// entry here falls into "Other" rather than being silently hidden, so a new backend specialty
+// always remains selectable even before this map is updated.
+const SPECIALTY_GROUP_ORDER = ['Primary care', 'Medical specialties', 'Surgical specialties', 'Behavioral health', 'Other'] as const
+const SPECIALTY_GROUPS: Record<string, (typeof SPECIALTY_GROUP_ORDER)[number]> = {
+  PRIMARY_CARE: 'Primary care',
+  PEDIATRICS: 'Primary care',
+  OBSTETRICS_GYNECOLOGY: 'Primary care',
+  CARDIOLOGY: 'Medical specialties',
+  DERMATOLOGY: 'Medical specialties',
+  NEUROLOGY: 'Medical specialties',
+  GASTROENTEROLOGY: 'Medical specialties',
+  ENDOCRINOLOGY: 'Medical specialties',
+  PULMONOLOGY: 'Medical specialties',
+  NEPHROLOGY: 'Medical specialties',
+  UROLOGY: 'Medical specialties',
+  OPHTHALMOLOGY: 'Medical specialties',
+  OTOLARYNGOLOGY: 'Medical specialties',
+  ALLERGY_IMMUNOLOGY: 'Medical specialties',
+  RHEUMATOLOGY: 'Medical specialties',
+  ORTHOPEDICS: 'Surgical specialties',
+  GENERAL_SURGERY: 'Surgical specialties',
+  PSYCHIATRY_MENTAL_HEALTH: 'Behavioral health',
+  PHYSICAL_MEDICINE_REHAB: 'Other',
+}
+
+function groupSpecialties(specialties: SpecialtyDto[]): { group: string; items: SpecialtyDto[] }[] {
+  const byGroup = new Map<string, SpecialtyDto[]>()
+  for (const specialty of specialties) {
+    const group = SPECIALTY_GROUPS[specialty.code] ?? 'Other'
+    const items = byGroup.get(group) ?? []
+    items.push(specialty)
+    byGroup.set(group, items)
+  }
+  return SPECIALTY_GROUP_ORDER.filter((group) => byGroup.has(group)).map((group) => ({
+    group,
+    items: byGroup.get(group)!,
+  }))
+}
+
 interface SearchFormProps {
   specialties: SpecialtyDto[]
   payers: PayerDto[]
@@ -114,10 +155,14 @@ function SearchForm({ specialties, payers, onSearch, disabled = false, initialVa
             <option value="" disabled>
               Select a specialty
             </option>
-            {specialties.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.name}
-              </option>
+            {groupSpecialties(specialties).map(({ group, items }) => (
+              <optgroup key={group} label={group}>
+                {items.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

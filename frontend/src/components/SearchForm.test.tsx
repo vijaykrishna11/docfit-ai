@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import SearchForm from './SearchForm'
 
-const SPECIALTIES = [{ code: 'CARDIOLOGY', name: 'Cardiology' }]
+const SPECIALTIES = [{ code: 'CARDIOLOGY', name: 'Cardiology', description: 'Providers listed under cardiology taxonomy classifications.' }]
 
 describe('SearchForm', () => {
   afterEach(() => {

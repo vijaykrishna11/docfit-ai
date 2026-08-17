@@ -1,6 +1,7 @@
 export interface SpecialtyDto {
   code: string
   name: string
+  description: string
 }
 
 export interface InsuranceCarrierDto {
