@@ -157,10 +157,13 @@ export interface ProviderNameSearchResultDto {
 export type SortOption = 'distance' | 'name' | 'name-desc'
 
 export interface LocationSuggestionDto {
-  zipCode: string
-  city: string
+  // ZIP suggestions carry a specific zipCode; CITY suggestions (deduplicated across every ZIP that
+  // shares the city) carry a null zipCode instead -- selecting one searches by city/state text.
+  zipCode: string | null
+  city: string | null
   stateCode: string
   label: string
+  type: 'ZIP' | 'CITY'
 }
 
 export interface UserDto {

@@ -127,7 +127,16 @@ function SearchForm({ specialties, payers, onSearch, disabled = false, initialVa
 
   function resolveLocationValue(): string {
     const matchedSuggestion = locationSuggestions.find((suggestion) => suggestion.label === locationText)
-    return matchedSuggestion ? matchedSuggestion.zipCode : locationText
+    if (!matchedSuggestion) {
+      return locationText
+    }
+    // A CITY suggestion has no single zipCode (it's deduplicated across every ZIP that shares the
+    // city) -- search by "city, state" text instead, which the backend already resolves to a
+    // city-wide centroid (CoordinatePrecision.CITY_CENTROID), never a fabricated single ZIP point.
+    if (matchedSuggestion.type === 'CITY') {
+      return `${matchedSuggestion.city}, ${matchedSuggestion.stateCode}`
+    }
+    return matchedSuggestion.zipCode ?? locationText
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -188,7 +197,7 @@ function SearchForm({ specialties, payers, onSearch, disabled = false, initialVa
           />
           <datalist id="location-suggestions">
             {locationSuggestions.map((suggestion) => (
-              <option key={suggestion.zipCode} value={suggestion.label} />
+              <option key={suggestion.zipCode ?? `${suggestion.city}-${suggestion.stateCode}`} value={suggestion.label} />
             ))}
           </datalist>
           {usingCurrentLocation && (

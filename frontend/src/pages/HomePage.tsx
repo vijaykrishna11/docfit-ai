@@ -204,9 +204,9 @@ function HomePage() {
     window.setTimeout(() => document.getElementById('location')?.focus(), 350)
   }
 
-  function handleAreaShortcut(zipCode: string) {
+  function handleAreaShortcut(location: string) {
     const next = new URLSearchParams(searchParams)
-    next.set('location', zipCode)
+    next.set('location', location)
     next.delete('lat')
     next.delete('lng')
     setSearchParams(next)
