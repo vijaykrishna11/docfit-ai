@@ -105,6 +105,42 @@ column type, migration of existing lat/lng data into `geography(Point,4326)`), s
 adopted when a measured query — not a guess — shows the bounding-box approach isn't enough, not
 preemptively. Nothing in this phase's measured numbers justifies it yet.
 
+## 10,000-row realistic-distribution benchmark (data-expansion phase)
+
+The 20,000-row benchmark above was a deliberate *worst case* (every row sharing one taxonomy
+code, to stress-test the bounding-box fix). This phase ran a second, more realistic synthetic
+benchmark: 10,000 providers/locations distributed across California's real lat/lng bounding box
+(not one point), with a realistic taxonomy mix (Primary Care ~35% of rows down to Allergy &
+Immunology ~0.3%, spanning all 19 specialty categories) -- entirely inside one transaction,
+`ROLLBACK`ed at the end, never committed.
+
+```
+Common specialty (Primary Care), 25mi bounding box: 4.8ms execution, 145 rows -- Index Scan on
+  idx_provider_location_lat_lng, not a sequential scan.
+Rare specialty (Allergy & Immunology), 50mi bounding box: 6.0ms execution, 0 rows -- same index
+  used correctly even for a low-selectivity taxonomy filter.
+Name search (ILIKE '%...%' across first/last/organization name): 15.8ms execution -- a full
+  sequential scan of all 10,000+ rows (Rows Removed by Filter: 10,571). Still fast in absolute
+  terms, but this is the one query in this benchmark that scales linearly with table size rather
+  than being bounded by an index -- exactly the CLAUDE.md 63 concern. Extrapolating linearly (not
+  measured beyond 10k this phase): roughly 80ms at 50k, 160ms at 100k. Still likely tolerable, but
+  this is the first thing to re-measure and consider `pg_trgm` for if the provider count grows
+  meaningfully past this phase's data (CLAUDE.md 64: only if measured, not preemptively -- adding
+  a Postgres extension is a real operational commitment).
+Provider detail (single NPI lookup, locations + taxonomies): 0.257ms -- fully indexed, trivial.
+```
+
+**Confirms the bounding-box index design decision.** At the small real dataset (492 rows), the
+planner correctly preferred a sequential scan (see "Current measured behavior" above) -- there
+wasn't enough data for the index to matter. At 10,000 rows, the planner now correctly *switches*
+to using `idx_provider_location_lat_lng` via an Index Scan for both the common and rare specialty
+case. This is the crossover point the original bounding-box work was built for, now observed
+directly rather than assumed.
+
+**Not attempted this phase**: 50,000- and 100,000-row benchmarks. The 10,000-row result above was
+judged sufficient evidence for this phase's scope (LA County readiness, not yet California-wide);
+a larger synthetic run is a reasonable next step before a genuinely large real import, not before.
+
 ## Indexes added, and why
 
 `provider_location(provider_id)`, `provider_location(postal_code)` -- support real queries the
