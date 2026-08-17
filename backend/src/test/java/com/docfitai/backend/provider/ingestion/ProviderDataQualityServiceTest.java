@@ -56,6 +56,44 @@ class ProviderDataQualityServiceTest extends PostgresIntegrationSupport {
     }
 
     @Test
+    void aFormatValidButChecksumInvalidNpiIsFlaggedSeparatelyFromFormat() {
+        // 10 digits (passes the format regex) but a deliberately wrong final check digit --
+        // CLAUDE.md "NPI Checksum Validation": must be flagged under its own check, not silently
+        // accepted just because it's the right length/shape.
+        jdbcTemplate.update("INSERT INTO provider (npi_number, entity_type, first_name, last_name) VALUES (?, 'INDIVIDUAL', ?, ?)",
+                "1851015170", "Checksum", "Test");
+
+        ProviderDataQualityService.QualityReport report = qualityService.runChecks();
+
+        assertThat(report.findings())
+                .anySatisfy(finding -> {
+                    assertThat(finding.check()).isEqualTo("invalid_npi_checksum");
+                    assertThat(finding.severity()).isEqualTo(QualitySeverity.ERROR);
+                    assertThat(finding.count()).isGreaterThanOrEqualTo(1);
+                });
+    }
+
+    @Test
+    void aGenuineChecksumValidNpiIsNeverFlagged() {
+        // The CMS-documented example NPI -- a real, checksum-valid number.
+        jdbcTemplate.update("INSERT INTO provider (npi_number, entity_type, first_name, last_name) VALUES (?, 'INDIVIDUAL', ?, ?)",
+                "1234567893", "Genuine", "Npi");
+
+        long before = qualityService.runChecks().findings().stream()
+                .filter(f -> f.check().equals("invalid_npi_checksum"))
+                .mapToLong(ProviderDataQualityService.QualityFinding::count)
+                .findFirst()
+                .orElse(0);
+        jdbcTemplate.update("DELETE FROM provider WHERE npi_number = '1234567893'");
+        long after = qualityService.runChecks().findings().stream()
+                .filter(f -> f.check().equals("invalid_npi_checksum"))
+                .mapToLong(ProviderDataQualityService.QualityFinding::count)
+                .findFirst()
+                .orElse(0);
+        assertThat(after).isEqualTo(before);
+    }
+
+    @Test
     void missingPhoneIsInfoSeverityNeverErrorOrWarning() {
         Long providerId = jdbcTemplate.queryForObject(
                 "INSERT INTO provider (npi_number, entity_type, first_name, last_name) VALUES ('9900000002', 'INDIVIDUAL', 'No', 'Phone') RETURNING id",

@@ -39,9 +39,16 @@ public class ProviderDataQualityService {
                 "SELECT count(*) FROM provider_location WHERE longitude IS NOT NULL AND (longitude < -180 OR longitude > 180)");
         int invalidNpiFormat = count("SELECT count(*) FROM provider WHERE npi_number !~ '^[0-9]{10}$'");
         int locationsMissingPhone = count("SELECT count(*) FROM provider_location WHERE phone IS NULL OR phone = ''");
+        // Only checked for rows that already pass the format check above -- a checksum can't be
+        // computed for something that isn't even 10 digits, and double-flagging the same row under
+        // two different check names would be confusing (CLAUDE.md "NPI Checksum Validation").
+        List<String> formatValidNpis =
+                jdbcTemplate.queryForList("SELECT npi_number FROM provider WHERE npi_number ~ '^[0-9]{10}$'", String.class);
+        int invalidNpiChecksum = (int) formatValidNpis.stream().filter(npi -> !NpiChecksumValidator.isValid(npi)).count();
 
         List<QualityFinding> findings = new ArrayList<>();
         addIfNonZero(findings, "invalid_npi_format", QualitySeverity.ERROR, invalidNpiFormat);
+        addIfNonZero(findings, "invalid_npi_checksum", QualitySeverity.ERROR, invalidNpiChecksum);
         addIfNonZero(findings, "providers_without_display_name", QualitySeverity.ERROR, providersWithoutDisplayName);
         addIfNonZero(findings, "locations_with_invalid_latitude", QualitySeverity.ERROR, locationsWithInvalidLatitude);
         addIfNonZero(findings, "locations_with_invalid_longitude", QualitySeverity.ERROR, locationsWithInvalidLongitude);
@@ -63,7 +70,7 @@ public class ProviderDataQualityService {
         log.info(
                 "Provider data quality report: withoutDisplayName={} withoutTaxonomy={} withoutLocation={} "
                         + "locationsMissingPostal={} invalidLatitude={} invalidLongitude={} invalidNpiFormat={} "
-                        + "errors={} warnings={} info={}",
+                        + "invalidNpiChecksum={} errors={} warnings={} info={}",
                 report.providersWithoutDisplayName(),
                 report.providersWithoutTaxonomy(),
                 report.providersWithoutLocation(),
@@ -71,6 +78,7 @@ public class ProviderDataQualityService {
                 report.locationsWithInvalidLatitude(),
                 report.locationsWithInvalidLongitude(),
                 invalidNpiFormat,
+                invalidNpiChecksum,
                 countBySeverity(findings, QualitySeverity.ERROR),
                 countBySeverity(findings, QualitySeverity.WARNING),
                 countBySeverity(findings, QualitySeverity.INFO));
