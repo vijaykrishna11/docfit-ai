@@ -1,15 +1,12 @@
 package com.docfitai.backend.provider.nppes;
 
-import com.docfitai.backend.provider.CoordinatePrecision;
 import com.docfitai.backend.provider.ingestion.DataImport;
 import com.docfitai.backend.provider.ingestion.DataImportRepository;
 import com.docfitai.backend.provider.ingestion.ProviderDataQualityService;
 import com.docfitai.backend.provider.ingestion.ProviderImportRecord;
-import com.docfitai.backend.provider.ingestion.ProviderLocationRecord;
 import com.docfitai.backend.provider.ingestion.ProviderUpsertService;
 import com.docfitai.backend.reference.ZipGeography;
 import com.docfitai.backend.reference.ZipGeographyRepository;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +57,7 @@ public class NppesImportRunner implements CommandLineRunner {
     private final JdbcTemplate jdbcTemplate;
     private final ConfigurableApplicationContext context;
     private final NppesImportProperties importProperties;
+    private final NppesRecordFactory recordFactory;
 
     public NppesImportRunner(
             NppesClient nppesClient,
@@ -69,7 +67,8 @@ public class NppesImportRunner implements CommandLineRunner {
             ProviderDataQualityService dataQualityService,
             JdbcTemplate jdbcTemplate,
             ConfigurableApplicationContext context,
-            NppesImportProperties importProperties) {
+            NppesImportProperties importProperties,
+            NppesRecordFactory recordFactory) {
         this.nppesClient = nppesClient;
         this.zipGeographyRepository = zipGeographyRepository;
         this.providerUpsertService = providerUpsertService;
@@ -78,6 +77,7 @@ public class NppesImportRunner implements CommandLineRunner {
         this.jdbcTemplate = jdbcTemplate;
         this.context = context;
         this.importProperties = importProperties;
+        this.recordFactory = recordFactory;
     }
 
     @Override
@@ -131,7 +131,7 @@ public class NppesImportRunner implements CommandLineRunner {
                             continue;
                         }
                         try {
-                            ProviderImportRecord importRecord = toImportRecord(mapped.get());
+                            ProviderImportRecord importRecord = recordFactory.toImportRecord(mapped.get());
                             var outcome = providerUpsertService.upsert(importRecord, dataImport.getId());
                             dataImport.recordUpsert(outcome);
                         } catch (Exception e) {
@@ -181,35 +181,5 @@ public class NppesImportRunner implements CommandLineRunner {
         dataQualityService.runChecks();
 
         System.exit(SpringApplication.exit(context, () -> 0));
-    }
-
-    /** Geocoding (ZIP -> coordinates) happens here, not in the pure mapper -- always truthfully labeled ZIP_CENTROID, never a real address geocode. */
-    private ProviderImportRecord toImportRecord(NppesProviderMapper.MappedProvider mapped) {
-        List<ProviderLocationRecord> locationRecords = mapped.locations().stream()
-                .map(location -> {
-                    BigDecimal latitude = null;
-                    BigDecimal longitude = null;
-                    CoordinatePrecision precision = CoordinatePrecision.UNKNOWN;
-                    Optional<ZipGeography> coordZip = zipGeographyRepository.findById(location.postalCode());
-                    if (coordZip.isPresent()) {
-                        latitude = coordZip.get().getLatitude();
-                        longitude = coordZip.get().getLongitude();
-                        precision = CoordinatePrecision.ZIP_CENTROID;
-                    }
-                    return new ProviderLocationRecord(
-                            "LOCATION",
-                            location.addressLine1(),
-                            location.addressLine2(),
-                            location.city(),
-                            location.stateCode(),
-                            location.postalCode(),
-                            location.phone(),
-                            location.fax(),
-                            latitude,
-                            longitude,
-                            precision);
-                })
-                .toList();
-        return new ProviderImportRecord(mapped.identity(), locationRecords, mapped.taxonomies());
     }
 }

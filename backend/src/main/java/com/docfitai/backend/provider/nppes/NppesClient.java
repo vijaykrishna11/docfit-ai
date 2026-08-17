@@ -52,6 +52,21 @@ public class NppesClient {
                 + "&enumeration_type=" + URLEncoder.encode(enumerationType, StandardCharsets.UTF_8)
                 + "&limit=" + limit
                 + "&skip=" + skip;
+        return executeWithRetry(url, "postal code " + postalCode);
+    }
+
+    /**
+     * Direct single-NPI lookup (CLAUDE.md "Operator-Triggerable Provider Refresh") -- the NPI
+     * Registry's own {@code number} query parameter, used to re-fetch one provider's current
+     * record without a postal-code search. Returns zero results if the NPI is not found or has
+     * since been deactivated -- callers must handle that, not treat it as an error.
+     */
+    public NppesResponse lookupByNpi(String npi) {
+        String url = BASE_URL + "?version=2.1&number=" + URLEncoder.encode(npi, StandardCharsets.UTF_8) + "&limit=1";
+        return executeWithRetry(url, "NPI " + npi);
+    }
+
+    private NppesResponse executeWithRetry(String url, String context) {
         HttpRequest request =
                 HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET().build();
 
@@ -64,24 +79,17 @@ public class NppesClient {
                 }
                 if (response.statusCode() >= 400 && response.statusCode() < 500) {
                     // A 4xx (bad request, not-found, etc.) will not resolve itself on retry.
-                    throw new IllegalStateException(
-                            "NPPES API returned HTTP " + response.statusCode() + " for postal code " + postalCode);
+                    throw new IllegalStateException("NPPES API returned HTTP " + response.statusCode() + " for " + context);
                 }
-                lastFailure = new IllegalStateException(
-                        "NPPES API returned HTTP " + response.statusCode() + " for postal code " + postalCode);
+                lastFailure = new IllegalStateException("NPPES API returned HTTP " + response.statusCode() + " for " + context);
             } catch (IOException e) {
-                lastFailure = new IllegalStateException("Failed to call NPPES API for postal code " + postalCode, e);
+                lastFailure = new IllegalStateException("Failed to call NPPES API for " + context, e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while calling NPPES API for postal code " + postalCode, e);
+                throw new IllegalStateException("Interrupted while calling NPPES API for " + context, e);
             }
             if (attempt < MAX_ATTEMPTS) {
-                log.warn(
-                        "NPPES request failed (attempt {}/{}) for postal code {}, retrying: {}",
-                        attempt,
-                        MAX_ATTEMPTS,
-                        postalCode,
-                        lastFailure.getMessage());
+                log.warn("NPPES request failed (attempt {}/{}) for {}, retrying: {}", attempt, MAX_ATTEMPTS, context, lastFailure.getMessage());
                 sleep(RETRY_DELAY);
             }
         }
