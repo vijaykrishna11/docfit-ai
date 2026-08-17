@@ -2,6 +2,7 @@ package com.docfitai.backend.provider.nppes;
 
 import com.docfitai.backend.provider.ingestion.DataImport;
 import com.docfitai.backend.provider.ingestion.DataImportRepository;
+import com.docfitai.backend.provider.ingestion.ProviderChangeSummaryService;
 import com.docfitai.backend.provider.ingestion.ProviderDataQualityService;
 import com.docfitai.backend.provider.ingestion.ProviderImportRecord;
 import com.docfitai.backend.provider.ingestion.ProviderUpsertService;
@@ -58,6 +59,7 @@ public class NppesImportRunner implements CommandLineRunner {
     private final ConfigurableApplicationContext context;
     private final NppesImportProperties importProperties;
     private final NppesRecordFactory recordFactory;
+    private final ProviderChangeSummaryService changeSummaryService;
 
     public NppesImportRunner(
             NppesClient nppesClient,
@@ -68,7 +70,8 @@ public class NppesImportRunner implements CommandLineRunner {
             JdbcTemplate jdbcTemplate,
             ConfigurableApplicationContext context,
             NppesImportProperties importProperties,
-            NppesRecordFactory recordFactory) {
+            NppesRecordFactory recordFactory,
+            ProviderChangeSummaryService changeSummaryService) {
         this.nppesClient = nppesClient;
         this.zipGeographyRepository = zipGeographyRepository;
         this.providerUpsertService = providerUpsertService;
@@ -78,6 +81,7 @@ public class NppesImportRunner implements CommandLineRunner {
         this.context = context;
         this.importProperties = importProperties;
         this.recordFactory = recordFactory;
+        this.changeSummaryService = changeSummaryService;
     }
 
     @Override
@@ -179,6 +183,7 @@ public class NppesImportRunner implements CommandLineRunner {
                 totalRequests);
 
         dataQualityService.runChecks();
+        log.info("Change summary for this import: {}", changeSummaryService.summarize(dataImport.getId()).toHumanSummary());
 
         System.exit(SpringApplication.exit(context, () -> 0));
     }

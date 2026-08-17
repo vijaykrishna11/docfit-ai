@@ -45,6 +45,9 @@ class ProviderCsvImportRunnerTest extends PostgresIntegrationSupport {
     @Autowired
     private ProviderCsvDryRunService dryRunService;
 
+    @Autowired
+    private ProviderChangeSummaryService changeSummaryService;
+
     @TempDir
     Path tempDir;
 
@@ -63,7 +66,7 @@ class ProviderCsvImportRunnerTest extends PostgresIntegrationSupport {
         properties.setEnabled(true);
         properties.setSourceDirectory(tempDir.toString());
         ProviderCsvImportRunner runner =
-                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService, dryRunService);
+                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService, dryRunService, changeSummaryService);
 
         runner.run();
 
@@ -98,7 +101,7 @@ class ProviderCsvImportRunnerTest extends PostgresIntegrationSupport {
         properties.setDryRun(true);
         properties.setSourceDirectory(tempDir.toString());
         ProviderCsvImportRunner runner =
-                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService, dryRunService);
+                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService, dryRunService, changeSummaryService);
         long importsBefore = dataImportRepository.count();
 
         runner.run();

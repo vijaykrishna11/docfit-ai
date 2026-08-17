@@ -36,18 +36,21 @@ public class ProviderCsvImportRunner implements CommandLineRunner {
     private final DataImportRepository dataImportRepository;
     private final ProviderDataQualityService dataQualityService;
     private final ProviderCsvDryRunService dryRunService;
+    private final ProviderChangeSummaryService changeSummaryService;
 
     public ProviderCsvImportRunner(
             ProviderCsvImportProperties properties,
             ProviderUpsertService upsertService,
             DataImportRepository dataImportRepository,
             ProviderDataQualityService dataQualityService,
-            ProviderCsvDryRunService dryRunService) {
+            ProviderCsvDryRunService dryRunService,
+            ProviderChangeSummaryService changeSummaryService) {
         this.properties = properties;
         this.upsertService = upsertService;
         this.dataImportRepository = dataImportRepository;
         this.dataQualityService = dataQualityService;
         this.dryRunService = dryRunService;
+        this.changeSummaryService = changeSummaryService;
     }
 
     @Override
@@ -88,6 +91,7 @@ public class ProviderCsvImportRunner implements CommandLineRunner {
                 dataImport.getLocationsUpdated(),
                 dataImport.getRecordsFailed());
         dataQualityService.runChecks();
+        log.info("Change summary for this import: {}", changeSummaryService.summarize(dataImport.getId()).toHumanSummary());
     }
 
     private void importFile(Path file, DataImport dataImport) throws IOException {
