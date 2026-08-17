@@ -20,6 +20,13 @@ public class ZipGeography {
     @Column(name = "state_code", nullable = false, length = 2)
     private String stateCode;
 
+    // Nullable: only populated where a reliable source has actually confirmed it (CLAUDE.md
+    // "County": "Do not infer county from city name"). Every row currently in this table does
+    // have a verified county (see V16 migration), but a future geography import is not required
+    // to supply one.
+    @Column(name = "county")
+    private String county;
+
     @Column(nullable = false, precision = 9, scale = 6)
     private BigDecimal latitude;
 
@@ -47,6 +54,10 @@ public class ZipGeography {
 
     public String getStateCode() {
         return stateCode;
+    }
+
+    public String getCounty() {
+        return county;
     }
 
     public BigDecimal getLatitude() {
