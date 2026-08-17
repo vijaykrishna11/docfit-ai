@@ -70,8 +70,11 @@ class ProviderSearchServiceTest extends PostgresIntegrationSupport {
         insertProvider(farButWithinDefault, "FarButIn", "Radius", "90815", "33.794000", "-118.116000");
         insertTaxonomy(farButWithinDefault, "207RC0000X", true);
 
+        // size=200: this suite shares one database across many test classes with overlapping
+        // 90802/CARDIOLOGY fixtures (see searchSupportsLatLngAndFreeTextCityOrigin below), so a
+        // small page size can truncate before reaching this test's own provider.
         ProviderSearchResponseDto narrow = providerSearchService.search(
-                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 2, "distance", 0, 20, null));
+                new ProviderSearchQuery("CARDIOLOGY", "90802", null, null, null, 2, "distance", 0, 200, null));
 
         assertThat(narrow.results()).extracting(ProviderSearchResultDto::npiNumber).contains(near);
         assertThat(narrow.results())

@@ -95,7 +95,7 @@ public class NppesImportRunner implements CommandLineRunner {
                     }
                     try {
                         ProviderImportRecord importRecord = toImportRecord(mapped.get());
-                        var outcome = providerUpsertService.upsert(importRecord);
+                        var outcome = providerUpsertService.upsert(importRecord, dataImport.getId());
                         dataImport.recordUpsert(outcome);
                     } catch (Exception e) {
                         log.warn("Failed to import NPI {}: {}", result.number(), e.getMessage());

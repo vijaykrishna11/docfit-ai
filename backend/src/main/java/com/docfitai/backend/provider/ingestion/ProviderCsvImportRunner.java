@@ -100,7 +100,7 @@ public class ProviderCsvImportRunner implements CommandLineRunner {
                 }
                 try {
                     ProviderImportRecord record = ProviderCsvRecordParser.parseRow(header, line);
-                    var outcome = upsertService.upsert(record);
+                    var outcome = upsertService.upsert(record, dataImport.getId());
                     dataImport.recordUpsert(outcome);
                 } catch (Exception e) {
                     log.warn("Failed to import {}:{} -- {}", file.getFileName(), lineNumber, e.getMessage());
