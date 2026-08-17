@@ -36,7 +36,8 @@ public class ProductionSafetyValidator {
             boolean cookieSecure,
             String corsAllowedOrigins,
             boolean syntheticInsuranceEnabled,
-            boolean csvImportEnabled) {
+            boolean csvImportEnabled,
+            boolean geographyImportEnabled) {
         List<String> problems = new ArrayList<>();
 
         if (jwtSecret == null) {
@@ -70,6 +71,11 @@ public class ProductionSafetyValidator {
             problems.add(
                     "docfitai.import.csv.enabled (DOCFIT_PROVIDER_CSV_IMPORT_ENABLED) is true -- bulk provider "
                             + "import must be operator-triggered on demand, not left enabled on every startup.");
+        }
+        if (geographyImportEnabled) {
+            problems.add(
+                    "docfitai.import.geography.enabled (DOCFIT_GEOGRAPHY_IMPORT_ENABLED) is true -- geography "
+                            + "reference import must be operator-triggered on demand, not left enabled on every startup.");
         }
 
         if (!problems.isEmpty()) {

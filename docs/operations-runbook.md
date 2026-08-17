@@ -57,14 +57,35 @@ flow; no user action needed unless their refresh cookie has also expired/been re
 tokens themselves are unaffected (they're opaque, hashed, DB-stored -- not signed with this secret).
 Safe to do at any time; plan for a brief wave of refresh calls immediately after.
 
-### Trigger a one-time NPPES import
+## Operator CLI reference (CLAUDE.md "Operator CLI Reference")
+
+Every data-mutating operation in DocFit AI is triggered from the command line by an operator with
+shell access to the deployment target -- there is deliberately **no public HTTP endpoint** that can
+trigger an import, refresh, or geography load (CLAUDE.md "No Public Admin Endpoints"). All of these
+are `CommandLineRunner`s gated by a Spring profile or a `docfitai.*.enabled` flag; the app exits
+after each one-shot run (`import`/`refresh`/`quality-report` profiles) or continues running normally
+afterward (`docfitai.import.geography.enabled` / `docfitai.import.csv.enabled`, which are plain
+config flags, not profiles).
+
+### Geography reference import
 
 ```
-SPRING_PROFILES_ACTIVE=import java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+DOCFIT_GEOGRAPHY_IMPORT_ENABLED=true java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
 ```
-Runs `NppesProviderImportRunner` once at startup, then the app continues running normally (does not
-re-run on subsequent restarts unless the `import` profile is explicitly reactivated). Idempotent --
-safe to re-run; see `docs/provider-ingestion.md`.
+Loads the bundled, source-verified 295-row LA County ZIP/ZCTA reference set (or
+`DOCFIT_GEOGRAPHY_SOURCE_PATH=<path>` for an operator-supplied file) into `zip_geography`.
+Idempotent -- upserts by ZIP, safe to re-run. See `docs/la-county-geography-sources.md`.
+
+### Bounded NPPES provider import
+
+```
+SPRING_PROFILES_ACTIVE=import DOCFIT_NPPES_IMPORT_ZIP_CODES=90802,90803,... \
+  java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+```
+Runs `NppesImportRunner` once, then exits. `DOCFIT_NPPES_IMPORT_ZIP_CODES` bounds the run to an
+explicit, calculated ZIP subset -- omit it to process every row currently in `zip_geography` (only
+sensible once that table itself is small/bounded). Idempotent -- safe to re-run; see
+`docs/la-county-provider-import.md` and `docs/provider-ingestion.md`.
 
 ### Trigger a one-time CSV import
 
@@ -72,6 +93,64 @@ Set `DOCFIT_PROVIDER_CSV_IMPORT_ENABLED=true` and `DOCFIT_PROVIDER_CSV_SOURCE_DI
 one startup only, then unset `DOCFIT_PROVIDER_CSV_IMPORT_ENABLED` before the next restart --
 `ProductionSafetyValidator` refuses to start the `prod` profile at all if this flag is left on,
 specifically to prevent it becoming an always-on background behavior.
+
+### Operator dry-run (CSV or geography import)
+
+```
+DOCFIT_PROVIDER_CSV_IMPORT_ENABLED=true DOCFIT_PROVIDER_CSV_DRY_RUN=true DOCFIT_PROVIDER_CSV_SOURCE_DIR=<path> \
+  java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+# or:
+DOCFIT_GEOGRAPHY_IMPORT_ENABLED=true DOCFIT_GEOGRAPHY_DRY_RUN=true \
+  java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+```
+Parses, validates, and counts every row exactly as a real import would -- **nothing is written**.
+Reports records read/valid/invalid, recognized vs. unrecognized taxonomy codes (CSV only), and a
+create-vs-update estimate. Use before a real import of an unfamiliar file to sanity-check it.
+
+### Operator-triggered provider refresh (by NPI list)
+
+```
+SPRING_PROFILES_ACTIVE=refresh DOCFIT_REFRESH_NPIS=1234567890,1234567891 \
+  java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+```
+Re-fetches and re-upserts exactly the listed NPIs from NPPES, then exits. Never touches any
+provider not in the list (CLAUDE.md "Partial Import Safety"). See "Provider refresh scheduler"
+below for the optional automated version of this same operation.
+
+### Provider refresh scheduler (optional, off by default)
+
+```
+DOCFIT_PROVIDER_REFRESH_ENABLED=true DOCFIT_REFRESH_NPIS=1234567890,1234567891 \
+  DOCFIT_PROVIDER_REFRESH_CRON="0 0 3 * * *" \
+  java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+```
+Runs the same refresh as above on a cron schedule (default: daily at 3am) instead of a one-shot CLI
+invocation. Off everywhere by default, including `prod` -- no background scheduling thread pool
+exists at all unless `DOCFIT_PROVIDER_REFRESH_ENABLED=true` is explicitly set.
+Overlap-protected by a Postgres advisory lock (`ProviderRefreshLock`): if a previous run is still in
+flight when the next scheduled firing happens, that firing is skipped, not queued or run
+concurrently. A failed run marks its `data_import` row `FAILED` and releases the lock cleanly --
+it does not crash the app or block search.
+
+### Data quality report (standalone, no import triggered)
+
+```
+SPRING_PROFILES_ACTIVE=quality-report java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+```
+Runs `ProviderDataQualityService.runChecks()` against the current data and logs the result, then
+exits -- for checking data quality without also triggering an import. The same check also runs
+automatically at the end of every import above.
+
+### Coverage report
+
+```
+curl http://localhost:8080/api/discovery/coverage
+```
+The one operator-facing report that *is* a public HTTP endpoint (deliberately -- it's read-only,
+reports only aggregate counts, and is what powers the frontend's own "Data sources & transparency"
+panel). Reports real provider/location/specialty counts, reference-geography counts, and actual
+provider-coverage counts as two clearly separate figures (CLAUDE.md "Reference Geography vs.
+Provider Data" -- see `docs/data-coverage.md`).
 
 ### Rebuild the geo/search index after a large data load
 
