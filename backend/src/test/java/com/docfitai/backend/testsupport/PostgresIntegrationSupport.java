@@ -55,4 +55,15 @@ public abstract class PostgresIntegrationSupport {
                 providerId, addressLine1, city, stateCode, postalCode, phone, latitude, longitude, npi + "-primary");
         return providerId;
     }
+
+    /** Inserts a standalone payer + one active plan for it (no networks) -- self-contained fixture, independent of seed data. Returns the new plan id. */
+    protected Long insertInsurancePlan(JdbcTemplate jdbcTemplate, String payerCode, String payerName, String planName) {
+        jdbcTemplate.update("INSERT INTO payer (code, name) VALUES (?, ?)", payerCode, payerName);
+        Long payerId = jdbcTemplate.queryForObject("SELECT id FROM payer WHERE code = ?", Long.class, payerCode);
+        jdbcTemplate.update(
+                "INSERT INTO insurance_plan (payer_id, plan_name, plan_type, active) VALUES (?, ?, 'PPO', TRUE)",
+                payerId, planName);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM insurance_plan WHERE payer_id = ? AND plan_name = ?", Long.class, payerId, planName);
+    }
 }

@@ -8,6 +8,10 @@ import com.docfitai.backend.account.SavedProviderRepository;
 import com.docfitai.backend.account.SavedSearchRepository;
 import com.docfitai.backend.account.ShortlistRepository;
 import com.docfitai.backend.auth.dto.UserDto;
+import com.docfitai.backend.navigator.ProviderNavigationRepository;
+import com.docfitai.backend.navigator.ProviderVerificationItemRepository;
+import com.docfitai.backend.navigator.UserReminderRepository;
+import com.docfitai.backend.navigator.UserSavedPlanRepository;
 import java.time.Instant;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +29,10 @@ public class AuthService {
     private final SavedProviderRepository savedProviderRepository;
     private final SavedSearchRepository savedSearchRepository;
     private final ShortlistRepository shortlistRepository;
+    private final ProviderNavigationRepository providerNavigationRepository;
+    private final ProviderVerificationItemRepository providerVerificationItemRepository;
+    private final UserReminderRepository userReminderRepository;
+    private final UserSavedPlanRepository userSavedPlanRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthRateLimiter rateLimiter;
@@ -36,6 +44,10 @@ public class AuthService {
             SavedProviderRepository savedProviderRepository,
             SavedSearchRepository savedSearchRepository,
             ShortlistRepository shortlistRepository,
+            ProviderNavigationRepository providerNavigationRepository,
+            ProviderVerificationItemRepository providerVerificationItemRepository,
+            UserReminderRepository userReminderRepository,
+            UserSavedPlanRepository userSavedPlanRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthRateLimiter rateLimiter,
@@ -45,6 +57,10 @@ public class AuthService {
         this.savedProviderRepository = savedProviderRepository;
         this.savedSearchRepository = savedSearchRepository;
         this.shortlistRepository = shortlistRepository;
+        this.providerNavigationRepository = providerNavigationRepository;
+        this.providerVerificationItemRepository = providerVerificationItemRepository;
+        this.userReminderRepository = userReminderRepository;
+        this.userSavedPlanRepository = userSavedPlanRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.rateLimiter = rateLimiter;
@@ -129,6 +145,12 @@ public class AuthService {
         shortlistRepository.deleteByUserId(userId);
         savedProviderRepository.deleteByUserId(userId);
         savedSearchRepository.deleteByUserId(userId);
+        // Care Navigator V4 user-owned tables (V13) -- deleted before the user row itself, same
+        // manual-ordering convention as everything else here (no ON DELETE CASCADE on app_user).
+        providerNavigationRepository.deleteByUserId(userId);
+        providerVerificationItemRepository.deleteByUserId(userId);
+        userReminderRepository.deleteByUserId(userId);
+        userSavedPlanRepository.deleteByUserId(userId);
         refreshTokenRepository.deleteByUserId(userId);
         appUserRepository.deleteById(userId);
     }
