@@ -21,12 +21,16 @@ public class Specialty {
     @Column(nullable = false)
     private String name;
 
+    @Column(nullable = false)
+    private String description;
+
     protected Specialty() {
     }
 
-    public Specialty(String code, String name) {
+    public Specialty(String code, String name, String description) {
         this.code = code;
         this.name = name;
+        this.description = description;
     }
 
     public Long getId() {
@@ -39,5 +43,9 @@ public class Specialty {
 
     public String getName() {
         return name;
+    }
+
+    public String getDescription() {
+        return description;
     }
 }

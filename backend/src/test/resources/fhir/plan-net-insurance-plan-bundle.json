@@ -1,0 +1,15 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "InsurancePlan",
+        "id": "plan-1",
+        "name": "Example PPO",
+        "type": [{ "coding": [{ "code": "PPO" }] }],
+        "network": [{ "reference": "Organization/network-1" }]
+      }
+    }
+  ]
+}

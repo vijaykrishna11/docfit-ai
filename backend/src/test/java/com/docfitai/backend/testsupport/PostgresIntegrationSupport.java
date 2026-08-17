@@ -1,6 +1,7 @@
 package com.docfitai.backend.testsupport;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -24,5 +25,45 @@ public abstract class PostgresIntegrationSupport {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+    }
+
+    /**
+     * Inserts an individual provider with one primary practice location (fixture shorthand used
+     * across provider/insurance tests since Provider Data Platform V2 moved addresses out of the
+     * {@code provider} table). Returns the new provider id.
+     */
+    protected Long insertProviderWithLocation(
+            JdbcTemplate jdbcTemplate,
+            String npi,
+            String firstName,
+            String lastName,
+            String addressLine1,
+            String city,
+            String stateCode,
+            String postalCode,
+            String phone,
+            Double latitude,
+            Double longitude) {
+        jdbcTemplate.update(
+                "INSERT INTO provider (npi_number, entity_type, first_name, last_name) VALUES (?, 'INDIVIDUAL', ?, ?)",
+                npi, firstName, lastName);
+        Long providerId = jdbcTemplate.queryForObject("SELECT id FROM provider WHERE npi_number = ?", Long.class, npi);
+        jdbcTemplate.update(
+                "INSERT INTO provider_location (provider_id, address_purpose, address_line_1, city, state_code, "
+                        + "postal_code, phone, latitude, longitude, coordinate_precision, is_primary, normalized_key) "
+                        + "VALUES (?, 'LOCATION', ?, ?, ?, ?, ?, ?, ?, 'ZIP_CENTROID', TRUE, ?)",
+                providerId, addressLine1, city, stateCode, postalCode, phone, latitude, longitude, npi + "-primary");
+        return providerId;
+    }
+
+    /** Inserts a standalone payer + one active plan for it (no networks) -- self-contained fixture, independent of seed data. Returns the new plan id. */
+    protected Long insertInsurancePlan(JdbcTemplate jdbcTemplate, String payerCode, String payerName, String planName) {
+        jdbcTemplate.update("INSERT INTO payer (code, name) VALUES (?, ?)", payerCode, payerName);
+        Long payerId = jdbcTemplate.queryForObject("SELECT id FROM payer WHERE code = ?", Long.class, payerCode);
+        jdbcTemplate.update(
+                "INSERT INTO insurance_plan (payer_id, plan_name, plan_type, active) VALUES (?, ?, 'PPO', TRUE)",
+                payerId, planName);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM insurance_plan WHERE payer_id = ? AND plan_name = ?", Long.class, payerId, planName);
     }
 }

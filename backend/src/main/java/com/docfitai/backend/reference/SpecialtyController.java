@@ -19,7 +19,7 @@ public class SpecialtyController {
     @GetMapping
     public List<SpecialtyDto> list() {
         return specialtyRepository.findAll().stream()
-                .map(s -> new SpecialtyDto(s.getCode(), s.getName()))
+                .map(s -> new SpecialtyDto(s.getCode(), s.getName(), s.getDescription()))
                 .toList();
     }
 }
