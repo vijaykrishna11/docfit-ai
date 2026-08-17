@@ -4,11 +4,14 @@ Base URL (local): `http://localhost:8080`
 
 All endpoints return JSON. Provider/reference-data search endpoints are public (no
 authentication required) -- searching DocFit AI never requires an account. Endpoints under
-`/api/auth`, `/api/saved-providers`, and `/api/saved-searches` require authentication (see
-[Authentication](#authentication) below). CORS is restricted to the local Vite dev origins
-(`http://localhost:5173`, `http://127.0.0.1:5173`), configurable via
+`/api/auth`, `/api/saved-providers`, `/api/saved-searches`, and `/api/account/**` require
+authentication (see [Authentication](#authentication) below). CORS is restricted to the local Vite
+dev origins (`http://localhost:5173`, `http://127.0.0.1:5173`), configurable via
 `docfitai.cors.allowed-origins`, with `Access-Control-Allow-Credentials: true` so the browser
-will send the refresh cookie on cross-origin requests from the frontend dev server.
+will send the refresh cookie on cross-origin requests from the frontend dev server. Allowed
+methods: `GET, POST, PUT, PATCH, DELETE, OPTIONS` -- `PATCH` was missing from this list until
+Care Navigator V4 (found by actually exercising a PATCH endpoint from a real browser; every
+PATCH-based feature, old and new, silently 403'd on the CORS preflight until fixed).
 
 Errors follow Spring Boot's default problem body shape, e.g.:
 ```json
@@ -373,8 +376,10 @@ Requires `Authorization: Bearer <accessToken>`. Returns the current user. **401*
 Updates the display name. Requires authentication.
 
 ### `DELETE /api/auth/me`
-Deletes the account, its saved providers, saved searches, and refresh tokens. Requires
-authentication and explicit frontend confirmation before this is ever called.
+Deletes the account and every user-owned table: saved providers, saved searches, shortlists,
+Care Navigator status/checklist/reminders/saved plan, and refresh tokens. Requires authentication
+and explicit frontend confirmation before this is ever called. Public provider/reference data is
+never touched.
 
 ---
 
@@ -457,3 +462,72 @@ doesn't exist. **429** if the rate limit is exceeded.
 they are operator review signals only (queried directly against the database; see
 `docs/directory-corrections.md`), and submitting one never alters the provider/location record
 it's about.
+
+---
+
+## Care Navigator
+
+All endpoints require `Authorization: Bearer <accessToken>` and are scoped to the authenticated
+user, same ownership model as saved providers/searches/shortlists (dedicated IDOR tests:
+`NavigatorAuthorizationTest`). See `docs/care-navigator-v4.md` for the product/privacy rationale.
+
+### `GET /api/account/navigator`
+Aggregate dashboard: `savedCount`, `toContactCount`, `verificationNeededCount`, `providers[]`
+(each with `status`, `verificationCompleted`/`verificationTotal`, `networkEvidence` if a plan is
+saved, and a deterministic `nextAction` label), `shortlists[]` (with per-shortlist
+`toContactCount`/`contactedCount`), `upcomingReminders[]` (next 10, incomplete only), and
+`savedPlan`. Bounded, batched queries -- never one round trip per saved provider.
+
+### `PUT /api/account/providers/{providerId}/navigation-status`
+```json
+{ "status": "TO_CONTACT" }
+```
+`status` is one of `SAVED`, `TO_CONTACT`, `CONTACTED`, `VERIFYING_DETAILS`, `SHORTLISTED`,
+`ARCHIVED` (an unknown value is a 400, rejected by JSON deserialization). Also ensures the
+provider is on the caller's plain saved-providers list (idempotent). **404** if the provider
+doesn't exist.
+
+### `GET /api/account/providers/{providerId}/verification-items`
+Returns all 6 fixed checklist items (`LOCATION`, `PHONE`, `ACCEPTING_NEW_PATIENTS`,
+`INSURANCE_NETWORK`, `APPOINTMENT_AVAILABILITY`, `EXPECTED_COST`), defaulting to `NOT_STARTED`
+for any not yet set by this user. **404** if the provider doesn't exist.
+
+### `PUT /api/account/providers/{providerId}/verification-items/{type}`
+```json
+{ "status": "CONFIRMED_BY_USER" }
+```
+`status` is one of `NOT_STARTED`, `NEEDS_CONFIRMATION`, `CONFIRMED_BY_USER`, `NOT_APPLICABLE`.
+`CONFIRMED_BY_USER` means only that this user says they confirmed it directly -- it is never
+written back to provider/network-evidence data, and never visible to any other user.
+
+### Reminders
+- `GET /api/account/reminders` -- all of the caller's reminders (completed and not), with a
+  denormalized `providerName`/`shortlistName` snapshot for display.
+- `POST /api/account/reminders`
+  ```json
+  { "title": "Follow up with provider", "dueAt": "2026-08-20T18:00:00Z", "providerId": 57, "shortlistId": null }
+  ```
+  `title` required (max 200 chars). `dueAt` required; a past timestamp is accepted (renders as
+  immediately overdue) but more than 5 years in the future is a **400**. `providerId`/`shortlistId`
+  are both optional and independent; if supplied, `providerId` must exist and `shortlistId` must
+  be owned by the caller (**404** otherwise).
+- `PATCH /api/account/reminders/{id}` -- `{ "completed": true }` marks done/undone. **404** if not
+  owned by the caller.
+- `DELETE /api/account/reminders/{id}` -- same 404 semantics.
+
+In-app only -- no push/SMS/email integration.
+
+### Saved plan
+- `GET /api/account/saved-plan` -- **200** with the saved plan, or **204** if none.
+- `PUT /api/account/saved-plan` -- `{ "insurancePlanId": 12 }`. Upserts (one saved plan per user).
+  **404** if the plan id is unknown.
+- `DELETE /api/account/saved-plan` -- removes it.
+
+Stores only a reference to one of DocFit's own public payer/plan records -- never a member ID,
+policy number, group number, date of birth, or SSN.
+
+### `GET /api/account/export`
+Returns the caller's complete data as JSON (`Content-Disposition: attachment`): account profile
+(no password hash), saved providers, shortlists (with members), saved searches, saved plan,
+navigation statuses, verification items, and reminders. Never includes another user's data,
+password hashes, or refresh tokens.

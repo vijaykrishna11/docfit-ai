@@ -83,6 +83,16 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
   auto-applied to provider data. See `docs/directory-corrections.md`.
 - **Recent searches**: kept in `sessionStorage` only (mirrors Recently Viewed), cleared by the
   user or when the tab closes, never sent to the server.
+- **Care Navigator** (`/navigator`): a personal, private dashboard for the *administrative* next
+  step after finding providers — a nonclinical status per saved provider (Saved/To contact/
+  Contacted/Verifying details/Shortlisted/Archived), a "Before you contact this provider"
+  verification checklist the user marks for themselves (never a DocFit-asserted fact), in-app-only
+  follow-up reminders (no push/SMS/email), and an explicit opt-in saved insurance plan (a
+  reference to DocFit's own public plan record only — never a member ID or policy number). See
+  `docs/care-navigator-v4.md`.
+- **Download my data / delete my account**: a full JSON export of everything a user owns
+  (`/account`, "Privacy & data"), and account deletion that removes every user-owned table while
+  leaving public provider data untouched. See `docs/user-data-export-and-deletion.md`.
 
 ## What it deliberately does not do
 
@@ -256,8 +266,6 @@ Reasonable future directions, not yet built:
   FHIR Plan-Net client exist; no specific payer endpoint is wired in by default — see
   `docs/insurance-network-research.md`)
 - Cost/price transparency intelligence (research only so far — see `docs/cost-intelligence-research.md`)
-- "Save my plan" as an explicit, deletable, opt-in user preference (deliberately deferred this
-  phase — see `docs/insurance-network-architecture.md`, "Privacy")
 - Expanded provider geography beyond the current Long Beach / LA demo area
 - Richer provider profiles (hours, languages, accepting-new-patients where reliably sourced)
 - Provider availability integration, only where a reliable data source exists

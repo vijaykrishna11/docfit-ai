@@ -42,6 +42,10 @@ account PII.
 - **IDOR on user-scoped data**: reviewed directly (`api-security-matrix.md` "IDOR posture"). Every
   saved-provider/saved-search mutation is scoped server-side by the JWT-derived `userId`, never a
   client-supplied one. Covered by `SavedSearchAuthorizationTest` and `SavedProviderServiceTest`.
+  Care Navigator (navigation status, verification checklist, reminders, saved plan, data export)
+  applies the same rule -- covered by `NavigatorAuthorizationTest`, which registers two users and
+  confirms neither can read or modify the other's status, checklist, reminder, saved plan, or
+  export contents.
 - **SQL injection**: reviewed every hand-written query in the codebase. All use parameterized
   JDBC/JPQL (`?`/named params), including the one query built with string concatenation
   (`ProviderNetworkEvidenceRepository`, which concatenates a *static* JPQL fragment, not user input).

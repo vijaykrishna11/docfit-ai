@@ -18,7 +18,13 @@ without an account works fully and stores nothing server-side at all.
 | Refresh tokens (SHA-256 hash of the raw token, never the raw token itself) | Login/refresh | `refresh_token` table | Until expiry (`REFRESH_TOKEN_TTL_DAYS`, default 30d) or explicit revocation (logout, rotation, account deletion) |
 | Saved providers | User clicks "Save" on a provider | `saved_provider` table | Until unsaved or account deletion |
 | Saved searches | User clicks "Save this search" | `saved_search` table (specialty, location text, lat/lng, radius, sort -- exactly the search criteria, nothing else) | Until deleted or account deletion |
+| Shortlists | User creates one | `provider_shortlist`/`shortlist_provider` tables (name + provider ids only) | Until deleted or account deletion |
+| Navigation status | User picks a status on a saved provider | `user_provider_navigation` table (one nonclinical status value per provider) | Until account deletion |
+| Verification checklist | User marks a checklist item | `provider_verification_item` table (a status per fixed administrative item -- never free text) | Until account deletion |
+| Reminders | User creates one | `user_reminder` table (title, due date, optional provider/shortlist reference) | Until deleted or account deletion |
+| Saved insurance plan | User explicitly clicks "Save my plan" | `user_saved_plan` table (a reference to DocFit's own public payer/plan id only -- never a member ID, policy number, group number, DOB, or SSN) | Until removed or account deletion |
 | Recently-viewed providers | Viewing a provider detail page | Browser `sessionStorage` only (`frontend/src/utils/recentlyViewed.ts`) -- never sent to the server, never tied to an account | Cleared when the browser tab/session ends |
+| Recent searches | Running a search | Browser `sessionStorage` only (`frontend/src/utils/recentSearches.ts`) -- specialty/location/radius/filter identifiers only, never free text | Cleared when the browser tab/session ends |
 | Compare list | Adding providers to the compare view | Browser `sessionStorage` only (`frontend/src/context/CompareContext.tsx`) | Cleared when the browser tab/session ends |
 | Selected insurance plan (`planId`) | Selecting a plan in search | URL query string only -- never persisted server-side (see `insurance-network-architecture.md` "Privacy") | Gone when the URL changes; not stored |
 
@@ -67,10 +73,20 @@ response payload (see `insurance-network-architecture.md` "Data retention").
 ## Account deletion
 
 `DELETE /api/auth/me` (`AuthService.deleteAccount`) removes the `app_user` row and cascades to that
-user's own `refresh_token`, `saved_provider`, and `saved_search` rows only -- verified by reading
-`AuthService.deleteAccount` directly (no cross-user data is touched; foreign keys are scoped to
-`user_id`). Provider directory data and network evidence are not user data and are unaffected by any
-account deletion, by design -- they describe providers, not the requesting user.
+user's own `refresh_token`, `saved_provider`, `saved_search`, `provider_shortlist`
+(`shortlist_provider` cascades at the DB level), `user_provider_navigation`,
+`provider_verification_item`, `user_reminder`, and `user_saved_plan` rows -- verified by reading
+`AuthService.deleteAccount` directly and by `AccountDeletionTest` (no cross-user data is touched;
+foreign keys are scoped to `user_id`). Provider directory data and network evidence are not user
+data and are unaffected by any account deletion, by design -- they describe providers, not the
+requesting user. See `docs/user-data-export-and-deletion.md` for the export/deletion feature's
+own detail.
+
+## Data export
+
+`GET /api/account/export` (`docs/user-data-export-and-deletion.md`) returns the same set of
+user-owned tables as one JSON download, scoped to the caller only (never accepts a user id
+parameter), and never includes the password hash or refresh tokens.
 
 ## Known gap
 
