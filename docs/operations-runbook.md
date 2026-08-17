@@ -40,8 +40,11 @@ Health check: `GET /actuator/health` (the only exposed Actuator endpoint; `show-
 - `GET /actuator/health` returns `{"status":"UP"}` -- confirms the app is up and the DB connection
   pool is healthy (Spring Boot's default health indicator includes a DB check).
 - A quick functional smoke check beyond the health endpoint: `GET /api/specialties` should return
-  the fixed reference list (5 entries as of this phase); an empty/error response despite a healthy
-  `/actuator/health` would indicate a data problem, not a connectivity one.
+  the fixed reference list (19 entries as of the data-expansion phase; see
+  `docs/specialty-taxonomy-map.md`); an empty/error response despite a healthy `/actuator/health`
+  would indicate a data problem, not a connectivity one.
+- `GET /api/discovery/coverage` gives a quick real-count sanity check (provider/location/specialty
+  counts, last import time) -- useful after a deploy or a restore to confirm the data looks right.
 
 ## Common operational tasks
 
@@ -89,6 +92,31 @@ previous known-good artifact, not a special procedure:
 3. **Config rollback**: revert the specific env var(s) changed (e.g. `JWT_SECRET`,
    `CORS_ALLOWED_ORIGINS`) and restart. `ProductionSafetyValidator` will refuse to start if the
    rollback itself is unsafe, which is the intended safety net.
+
+## Backup/restore rehearsal
+
+Rehearsed this phase (data-expansion) using `pg_dump`/`pg_restore` against a disposable Postgres
+container -- never against or into the real developer database:
+
+```
+docker exec <real-postgres-container> pg_dump -U docfitai -d docfitai -F c -f /tmp/backup.dump
+docker cp <real-postgres-container>:/tmp/backup.dump ./backup.dump
+
+docker run -d --name restore-rehearsal -e POSTGRES_DB=docfitai -e POSTGRES_USER=docfitai \
+  -e POSTGRES_PASSWORD=<...> -p 5434:5432 postgres:17-alpine
+docker cp ./backup.dump restore-rehearsal:/tmp/backup.dump
+docker exec restore-rehearsal pg_restore -U docfitai -d docfitai --no-owner --no-privileges /tmp/backup.dump
+
+# Compare row counts table-by-table between the two containers, then:
+docker rm -f restore-rehearsal
+```
+
+Verified clean restore with matching row counts across every table added since the last rehearsal
+-- including all of Care Discovery V3 (`provider_shortlist`, `shortlist_provider`,
+`provider_data_report`), Care Navigator V4 (`user_provider_navigation`,
+`provider_verification_item`, `user_reminder`, `user_saved_plan`), and this phase's own additions
+(`provider_change_event`, `specialty.description`, `zip_geography.county`). No data loss, no
+schema drift, no manual intervention needed beyond the dump/restore commands themselves.
 
 ## Incident severity (starting point)
 
