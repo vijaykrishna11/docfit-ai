@@ -36,10 +36,22 @@ public class NppesClient {
 
     /** @param enumerationType "NPI-1" (individual) or "NPI-2" (organization). */
     public NppesResponse searchByPostalCode(String postalCode, String enumerationType, int limit) {
+        return searchByPostalCode(postalCode, enumerationType, limit, 0);
+    }
+
+    /**
+     * @param enumerationType "NPI-1" (individual) or "NPI-2" (organization).
+     * @param skip pagination offset -- verified empirically against the live API (CLAUDE.md
+     *     "Investigate NPPES API Limitations"): {@code limit} is silently capped at 200 per
+     *     request regardless of the value requested, but {@code skip} genuinely pages further
+     *     (skip=200 returns a different result set than skip=0 for the same query).
+     */
+    public NppesResponse searchByPostalCode(String postalCode, String enumerationType, int limit, int skip) {
         String url = BASE_URL + "?version=2.1"
                 + "&postal_code=" + URLEncoder.encode(postalCode, StandardCharsets.UTF_8)
                 + "&enumeration_type=" + URLEncoder.encode(enumerationType, StandardCharsets.UTF_8)
-                + "&limit=" + limit;
+                + "&limit=" + limit
+                + "&skip=" + skip;
         HttpRequest request =
                 HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT).GET().build();
 

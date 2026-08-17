@@ -50,6 +50,18 @@ public class DataImport {
     @Column(name = "records_failed", nullable = false)
     private int recordsFailed;
 
+    // Import scope provenance (CLAUDE.md "Import Scope Metadata" / "Complete vs Partial Import"),
+    // added V15. Deliberately separate from `status` above: `status` describes whether individual
+    // rows succeeded/failed within whatever was actually queried; `scopeType` describes whether
+    // that query itself was exhaustive for its stated area. "PARTIAL" is the only value ever set
+    // by this codebase today -- nothing computes "COMPLETE_FOR_SCOPE" yet, since no importer here
+    // has a source-guaranteed-complete query (CLAUDE.md "Partial Import Safety").
+    @Column(name = "scope_type", nullable = false)
+    private String scopeType = "PARTIAL";
+
+    @Column(name = "scope_description")
+    private String scopeDescription;
+
     protected DataImport() {
     }
 
@@ -57,6 +69,11 @@ public class DataImport {
         this.source = source;
         this.startedAt = startedAt;
         this.status = DataImportStatus.RUNNING;
+    }
+
+    public void setScope(String scopeType, String scopeDescription) {
+        this.scopeType = scopeType;
+        this.scopeDescription = scopeDescription;
     }
 
     public void recordUpsert(ProviderUpsertService.UpsertOutcome outcome) {
@@ -127,5 +144,13 @@ public class DataImport {
 
     public int getRecordsFailed() {
         return recordsFailed;
+    }
+
+    public String getScopeType() {
+        return scopeType;
+    }
+
+    public String getScopeDescription() {
+        return scopeDescription;
     }
 }
