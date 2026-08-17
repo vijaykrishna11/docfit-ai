@@ -201,12 +201,22 @@ docker exec restore-rehearsal pg_restore -U docfitai -d docfitai --no-owner --no
 docker rm -f restore-rehearsal
 ```
 
-Verified clean restore with matching row counts across every table added since the last rehearsal
--- including all of Care Discovery V3 (`provider_shortlist`, `shortlist_provider`,
+Verified clean restore with matching row counts across every table added since that rehearsal --
+including all of Care Discovery V3 (`provider_shortlist`, `shortlist_provider`,
 `provider_data_report`), Care Navigator V4 (`user_provider_navigation`,
-`provider_verification_item`, `user_reminder`, `user_saved_plan`), and this phase's own additions
+`provider_verification_item`, `user_reminder`, `user_saved_plan`), Data Expansion V5
 (`provider_change_event`, `specialty.description`, `zip_geography.county`). No data loss, no
 schema drift, no manual intervention needed beyond the dump/restore commands themselves.
+
+**Repeated for LA County Expansion V5.1** (schema changed materially -- V17/V18/V19 migrations,
+the new `address_geocode_cache` table, real LA County data now loaded): same procedure, same
+disposable-container pattern, real dev database at the time (5,854 providers, 8,095 locations,
+6,648 taxonomies, 295 `zip_geography` rows, 120 users, plus every other table). Every table's exact
+row count (`COUNT(*)`, not the `pg_stat_user_tables` estimate) matched between the original and
+restored database, including `address_geocode_cache` and `provider_change_event` at their real
+current value of 0 rows each (neither feature had produced real data yet at rehearsal time -- an
+empty table restoring correctly as empty is still a real, meaningful check). Database size at
+rehearsal time: 52 MB. No data loss, no schema drift.
 
 ## Incident severity (starting point)
 
