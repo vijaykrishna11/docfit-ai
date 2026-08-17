@@ -1,15 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApiError, deleteAccount, updateDisplayName } from '../api/client'
+import { ApiError, deleteAccount, downloadUserDataExport, updateDisplayName } from '../api/client'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
-import { AlertIcon, CheckIcon, UserIcon } from '../components/icons'
+import { AlertIcon, CheckIcon, DownloadIcon, UserIcon } from '../components/icons'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
+import { clearRecentlyViewed } from '../utils/recentlyViewed'
+import { clearRecentSearches } from '../utils/recentSearches'
 
 const GENERIC_ERROR = 'Something went wrong. Please try again.'
 
 function AccountPage() {
   const { user, logout, setUser } = useAuth()
+  const { showToast } = useToast()
   const navigate = useNavigate()
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
@@ -20,6 +24,9 @@ function AccountPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   if (!user) {
     return null
@@ -45,6 +52,19 @@ function AccountPage() {
   async function handleLogout() {
     await logout()
     navigate('/')
+  }
+
+  async function handleExportData() {
+    setExportError(null)
+    setIsExporting(true)
+    try {
+      await downloadUserDataExport()
+      showToast('Data downloaded')
+    } catch (error) {
+      setExportError(error instanceof ApiError ? error.message : GENERIC_ERROR)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   async function handleDeleteAccount() {
@@ -110,11 +130,58 @@ function AccountPage() {
           </button>
         </section>
 
+        <section className="account-card">
+          <h2>Privacy &amp; data</h2>
+          <p className="results-subtext">
+            Searches are not automatically saved to your account. Saved data exists only when you request it, and
+            your navigator checklist is private to your account.
+          </p>
+
+          <div className="privacy-actions">
+            {exportError && (
+              <div className="state-panel error-panel auth-error" role="alert">
+                <AlertIcon width={18} height={18} />
+                <p>{exportError}</p>
+              </div>
+            )}
+            <button type="button" className="secondary-button" onClick={() => void handleExportData()} disabled={isExporting}>
+              {isExporting && <span className="spinner spinner-sm" aria-hidden="true" />}
+              <DownloadIcon width={16} height={16} />
+              Download my data
+            </button>
+
+            <div className="privacy-local-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  clearRecentSearches()
+                  showToast('Recent searches cleared')
+                }}
+              >
+                Clear recent searches
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  clearRecentlyViewed()
+                  showToast('Recently viewed providers cleared')
+                }}
+              >
+                Clear recently viewed providers
+              </button>
+            </div>
+            <p className="field-hint">Recent searches and recently viewed providers are stored only in this browser, never on DocFit's servers.</p>
+          </div>
+        </section>
+
         <section className="account-card account-danger-zone">
           <h2>Delete account</h2>
           <p className="results-subtext">
-            Permanently deletes your account along with your saved providers and saved searches. This
-            cannot be undone.
+            Deleting your account permanently removes your saved DocFit data -- saved providers, shortlists, saved
+            searches, navigator status, reminders, and your saved plan. Public provider records are not affected.
+            This cannot be undone.
           </p>
           {deleteError && (
             <div className="state-panel error-panel auth-error" role="alert">

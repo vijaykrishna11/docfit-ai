@@ -6,7 +6,7 @@ import Footer from '../components/Footer'
 import Header from '../components/Header'
 import { BookmarkIcon, LocationIcon } from '../components/icons'
 
-function buildRunSearchUrl(search: SavedSearchDto): string {
+export function buildRunSearchUrl(search: SavedSearchDto): string {
   const params = new URLSearchParams()
   params.set('specialty', search.specialtyCode)
   params.set('radius', String(search.radius))

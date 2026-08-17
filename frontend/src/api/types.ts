@@ -215,6 +215,118 @@ export type ReportTypeValue =
   | 'INSURANCE_INFO_APPEARS_INCORRECT'
   | 'OTHER'
 
+// ---------- Care Navigator ----------
+
+export type NavigationStatusValue = 'SAVED' | 'TO_CONTACT' | 'CONTACTED' | 'VERIFYING_DETAILS' | 'SHORTLISTED' | 'ARCHIVED'
+
+export const NAVIGATION_STATUS_LABELS: Record<NavigationStatusValue, string> = {
+  SAVED: 'Saved',
+  TO_CONTACT: 'To contact',
+  CONTACTED: 'Contacted',
+  VERIFYING_DETAILS: 'Verifying details',
+  SHORTLISTED: 'Shortlisted',
+  ARCHIVED: 'Archived',
+}
+
+export const NAVIGATION_STATUS_VALUES: NavigationStatusValue[] = [
+  'SAVED',
+  'TO_CONTACT',
+  'CONTACTED',
+  'VERIFYING_DETAILS',
+  'SHORTLISTED',
+  'ARCHIVED',
+]
+
+export interface NavigationStatusDto {
+  providerId: number
+  status: NavigationStatusValue
+  updatedAt: string
+}
+
+export type VerificationTypeValue =
+  | 'LOCATION'
+  | 'PHONE'
+  | 'ACCEPTING_NEW_PATIENTS'
+  | 'INSURANCE_NETWORK'
+  | 'APPOINTMENT_AVAILABILITY'
+  | 'EXPECTED_COST'
+
+export const VERIFICATION_TYPE_LABELS: Record<VerificationTypeValue, string> = {
+  LOCATION: 'Confirm office location',
+  PHONE: 'Confirm phone number',
+  ACCEPTING_NEW_PATIENTS: 'Confirm accepting-new-patient status',
+  INSURANCE_NETWORK: 'Confirm insurance/network status',
+  APPOINTMENT_AVAILABILITY: 'Ask about appointment availability',
+  EXPECTED_COST: 'Ask about expected cost',
+}
+
+export type VerificationItemStatusValue = 'NOT_STARTED' | 'NEEDS_CONFIRMATION' | 'CONFIRMED_BY_USER' | 'NOT_APPLICABLE'
+
+export interface VerificationItemDto {
+  verificationType: VerificationTypeValue
+  status: VerificationItemStatusValue
+  confirmedAt: string | null
+  updatedAt: string | null
+}
+
+export interface ReminderDto {
+  id: number
+  title: string
+  dueAt: string
+  completedAt: string | null
+  providerId: number | null
+  providerName: string | null
+  shortlistId: number | null
+  shortlistName: string | null
+  createdAt: string
+}
+
+export interface SavedPlanDto {
+  id: number
+  payerId: number
+  payerName: string
+  insurancePlanId: number
+  planName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NavigatorProviderDto {
+  providerId: number
+  npiNumber: string
+  entityType: ProviderEntityTypeValue
+  firstName: string | null
+  lastName: string | null
+  organizationName: string | null
+  location: ProviderLocationDto | null
+  status: NavigationStatusValue
+  verificationCompleted: number
+  verificationTotal: number
+  networkEvidence: NetworkEvidenceSummaryDto | null
+  nextAction: string
+  savedAt: string
+}
+
+export interface NavigatorShortlistSummaryDto {
+  id: number
+  name: string
+  providerCount: number
+  toContactCount: number
+  contactedCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NavigatorDashboardDto {
+  savedCount: number
+  toContactCount: number
+  verificationNeededCount: number
+  providers: NavigatorProviderDto[]
+  shortlists: NavigatorShortlistSummaryDto[]
+  upcomingReminders: ReminderDto[]
+  savedPlan: SavedPlanDto | null
+}
+
 export interface SavedSearchDto {
   id: number
   name: string | null

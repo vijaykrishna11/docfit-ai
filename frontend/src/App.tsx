@@ -5,9 +5,11 @@ import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { CompareProvider } from './context/CompareContext'
 import { SavedProvidersProvider } from './context/SavedProvidersContext'
+import { ToastProvider } from './context/ToastContext'
 import AccountPage from './pages/AccountPage'
 import ComparePage from './pages/ComparePage'
 import HomePage from './pages/HomePage'
+import NavigatorPage from './pages/NavigatorPage'
 import NotFoundPage from './pages/NotFoundPage'
 import ProviderDetailPage from './pages/ProviderDetailPage'
 import RegisterPage from './pages/RegisterPage'
@@ -23,59 +25,69 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
-          <SavedProvidersProvider>
-            <CompareProvider>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/providers/:id" element={<ProviderDetailPage />} />
-                <Route path="/compare" element={<ComparePage />} />
-                <Route path="/share/providers" element={<SharedProvidersPage />} />
-                <Route path="/signin" element={<SignInPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route
-                  path="/account"
-                  element={
-                    <ProtectedRoute>
-                      <AccountPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/saved"
-                  element={
-                    <ProtectedRoute>
-                      <SavedProvidersPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/saved-searches"
-                  element={
-                    <ProtectedRoute>
-                      <SavedSearchesPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/shortlists"
-                  element={
-                    <ProtectedRoute>
-                      <ShortlistsPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/shortlists/:id"
-                  element={
-                    <ProtectedRoute>
-                      <ShortlistDetailPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </CompareProvider>
-          </SavedProvidersProvider>
+          <ToastProvider>
+            <SavedProvidersProvider>
+              <CompareProvider>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/providers/:id" element={<ProviderDetailPage />} />
+                  <Route path="/compare" element={<ComparePage />} />
+                  <Route path="/share/providers" element={<SharedProvidersPage />} />
+                  <Route path="/signin" element={<SignInPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+                  <Route
+                    path="/account"
+                    element={
+                      <ProtectedRoute>
+                        <AccountPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/navigator"
+                    element={
+                      <ProtectedRoute>
+                        <NavigatorPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/saved"
+                    element={
+                      <ProtectedRoute>
+                        <SavedProvidersPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/saved-searches"
+                    element={
+                      <ProtectedRoute>
+                        <SavedSearchesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/shortlists"
+                    element={
+                      <ProtectedRoute>
+                        <ShortlistsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/shortlists/:id"
+                    element={
+                      <ProtectedRoute>
+                        <ShortlistDetailPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </CompareProvider>
+            </SavedProvidersProvider>
+          </ToastProvider>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

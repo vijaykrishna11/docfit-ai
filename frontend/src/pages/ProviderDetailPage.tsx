@@ -18,11 +18,16 @@ import {
   ShareIcon,
 } from '../components/icons'
 import AddToShortlistMenu from '../components/AddToShortlistMenu'
+import { CopyIcon } from '../components/icons'
+import NavigationStatusSelect from '../components/NavigationStatusSelect'
 import NetworkEvidenceDrawer from '../components/NetworkEvidenceDrawer'
 import ReportIncorrectInfoModal from '../components/ReportIncorrectInfoModal'
 import SaveProviderButton from '../components/SaveProviderButton'
+import VerificationChecklist from '../components/VerificationChecklist'
 import WhyThisResult from '../components/WhyThisResult'
 import { useAuth } from '../context/AuthContext'
+import { useSavedProviders } from '../context/SavedProvidersContext'
+import { useToast } from '../context/ToastContext'
 import {
   directionsUrl,
   formatDistance,
@@ -137,12 +142,19 @@ function LocationPrecisionNote({ location }: { location: ProviderLocationDto }) 
 
 function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; planId?: number }) {
   const { isAuthenticated } = useAuth()
+  const { isSaved } = useSavedProviders()
+  const { showToast } = useToast()
   const name = providerDisplayName(detail)
   const isOrganization = detail.entityType === 'ORGANIZATION'
   const primaryTaxonomy = detail.taxonomies.find((taxonomy) => taxonomy.primaryTaxonomy) ?? detail.taxonomies[0]
   const [shareCopied, setShareCopied] = useState(false)
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
+  // Defaults to SAVED (the backend's own default for a saved provider with no explicit status
+  // row yet) -- avoids a dedicated GET just to prefill this control.
+  const [navigationStatus, setNavigationStatus] = useState<'SAVED' | 'TO_CONTACT' | 'CONTACTED' | 'VERIFYING_DETAILS' | 'SHORTLISTED' | 'ARCHIVED'>(
+    'SAVED',
+  )
 
   // All of a provider's locations, in one list -- the originally-selected/nearest one first.
   // Switching which one is "active" is pure client state: every location's full data (address,
@@ -160,6 +172,29 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
       await navigator.clipboard.writeText(window.location.href)
       setShareCopied(true)
       window.setTimeout(() => setShareCopied(false), 2500)
+    } catch {
+      // Clipboard access can be denied by the browser -- fail quietly rather than show a raw error.
+    }
+  }
+
+  async function handleCopyNpi() {
+    try {
+      await navigator.clipboard.writeText(detail.npiNumber)
+      showToast('NPI copied')
+    } catch {
+      // Clipboard access can be denied by the browser -- fail quietly rather than show a raw error.
+    }
+  }
+
+  async function handleCopyOfficeDetails() {
+    if (!activeLocation) return
+    const { line1, line2 } = formattedAddress(activeLocation)
+    const lines = [name, `NPI ${detail.npiNumber}`, `${line1}, ${line2}`, activeLocation.phone ? activeLocation.phone : null].filter(
+      Boolean,
+    )
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      showToast('Office details copied')
     } catch {
       // Clipboard access can be denied by the browser -- fail quietly rather than show a raw error.
     }
@@ -214,7 +249,24 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
             </>
           )}
         </button>
+        <button type="button" className="ghost-button" onClick={() => void handleCopyNpi()}>
+          <CopyIcon width={14} height={14} />
+          Copy NPI
+        </button>
+        {activeLocation && (
+          <button type="button" className="ghost-button" onClick={() => void handleCopyOfficeDetails()}>
+            <CopyIcon width={14} height={14} />
+            Copy office details
+          </button>
+        )}
       </div>
+
+      {isAuthenticated && isSaved(detail.id) && (
+        <div className="navigator-card-status-row provider-detail-status-row">
+          <span className="results-subtext">Navigator status</span>
+          <NavigationStatusSelect providerId={detail.id} status={navigationStatus} onChanged={setNavigationStatus} />
+        </div>
+      )}
 
       <dl className="provider-detail-grid">
         {activeLocation && (
@@ -329,6 +381,8 @@ function ProviderDetailCard({ detail, planId }: { detail: ProviderDetailDto; pla
           hasPhone={activeLocation ? Boolean(activeLocation.phone) : undefined}
         />
       )}
+
+      <VerificationChecklist providerId={detail.id} isAuthenticated={isAuthenticated} />
 
       {planId != null ? (
         <div className="provider-network-evidence-section">

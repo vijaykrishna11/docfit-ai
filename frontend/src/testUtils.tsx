@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { CompareProvider } from './context/CompareContext'
 import { SavedProvidersProvider } from './context/SavedProvidersContext'
+import { ToastProvider } from './context/ToastContext'
 
 interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper'> {
   route?: string
@@ -14,9 +15,11 @@ export function renderWithProviders(ui: ReactElement, options?: RenderWithProvid
   return render(
     <MemoryRouter initialEntries={[route]}>
       <AuthProvider>
-        <SavedProvidersProvider>
-          <CompareProvider>{ui}</CompareProvider>
-        </SavedProvidersProvider>
+        <ToastProvider>
+          <SavedProvidersProvider>
+            <CompareProvider>{ui}</CompareProvider>
+          </SavedProvidersProvider>
+        </ToastProvider>
       </AuthProvider>
     </MemoryRouter>,
     renderOptions,

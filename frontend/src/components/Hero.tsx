@@ -1,9 +1,13 @@
+import { Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import HeroIllustration from './HeroIllustration'
-import { CheckIcon } from './icons'
+import { CheckIcon, ClipboardCheckIcon } from './icons'
 
 const TRUST_INDICATORS = ['Real NPI provider data', 'Location-based search', 'No account required']
 
 function Hero() {
+  const { isAuthenticated } = useAuth()
+
   return (
     <section className="hero">
       <div className="container hero-inner">
@@ -22,6 +26,12 @@ function Hero() {
               </li>
             ))}
           </ul>
+          {isAuthenticated && (
+            <Link className="secondary-button hero-navigator-cta" to="/navigator">
+              <ClipboardCheckIcon width={16} height={16} />
+              Open Care Navigator
+            </Link>
+          )}
         </div>
 
         <HeroIllustration />

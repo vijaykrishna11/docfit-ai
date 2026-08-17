@@ -3,12 +3,17 @@ import type {
   InsuranceCarrierDto,
   InsurancePlanDto,
   LocationSuggestionDto,
+  NavigationStatusDto,
+  NavigationStatusValue,
+  NavigatorDashboardDto,
   NetworkEvidenceDetailDto,
   PayerDto,
   ProviderDetailDto,
   ProviderNameSearchResultDto,
   ProviderSearchResponseDto,
+  ReminderDto,
   ReportTypeValue,
+  SavedPlanDto,
   SavedProviderDto,
   SavedSearchDto,
   ShortlistDetailDto,
@@ -16,6 +21,9 @@ import type {
   SortOption,
   SpecialtyDto,
   UserDto,
+  VerificationItemDto,
+  VerificationItemStatusValue,
+  VerificationTypeValue,
 } from './types'
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
@@ -373,4 +381,85 @@ export interface SubmitReportParams {
 
 export function submitProviderDataReport(providerId: number, params: SubmitReportParams): Promise<{ id: number }> {
   return request<{ id: number }>(`/api/providers/${providerId}/reports`, { method: 'POST', body: params })
+}
+
+// ---------- Care Navigator ----------
+
+export function fetchNavigatorDashboard(): Promise<NavigatorDashboardDto> {
+  return request<NavigatorDashboardDto>('/api/account/navigator')
+}
+
+export function updateNavigationStatus(providerId: number, status: NavigationStatusValue): Promise<NavigationStatusDto> {
+  return request<NavigationStatusDto>(`/api/account/providers/${providerId}/navigation-status`, {
+    method: 'PUT',
+    body: { status },
+  })
+}
+
+export function fetchVerificationItems(providerId: number): Promise<VerificationItemDto[]> {
+  return request<VerificationItemDto[]>(`/api/account/providers/${providerId}/verification-items`)
+}
+
+export function updateVerificationItem(
+  providerId: number,
+  verificationType: VerificationTypeValue,
+  status: VerificationItemStatusValue,
+  providerLocationId?: number,
+): Promise<VerificationItemDto> {
+  return request<VerificationItemDto>(`/api/account/providers/${providerId}/verification-items/${verificationType}`, {
+    method: 'PUT',
+    body: { status, providerLocationId },
+  })
+}
+
+export function fetchReminders(): Promise<ReminderDto[]> {
+  return request<ReminderDto[]>('/api/account/reminders')
+}
+
+export interface CreateReminderParams {
+  title: string
+  dueAt: string
+  providerId?: number
+  shortlistId?: number
+}
+
+export function createReminder(params: CreateReminderParams): Promise<ReminderDto> {
+  return request<ReminderDto>('/api/account/reminders', { method: 'POST', body: params })
+}
+
+export function setReminderCompleted(id: number, completed: boolean): Promise<void> {
+  return request<void>(`/api/account/reminders/${id}`, { method: 'PATCH', body: { completed } })
+}
+
+export function deleteReminder(id: number): Promise<void> {
+  return request<void>(`/api/account/reminders/${id}`, { method: 'DELETE' })
+}
+
+export function fetchSavedPlan(): Promise<SavedPlanDto | null> {
+  return request<SavedPlanDto | null>('/api/account/saved-plan')
+}
+
+export function saveSavedPlan(insurancePlanId: number): Promise<SavedPlanDto> {
+  return request<SavedPlanDto>('/api/account/saved-plan', { method: 'PUT', body: { insurancePlanId } })
+}
+
+export function removeSavedPlan(): Promise<void> {
+  return request<void>('/api/account/saved-plan', { method: 'DELETE' })
+}
+
+/** Downloads the caller's full data export as a JSON file (CLAUDE.md "User Data Download"). */
+export async function downloadUserDataExport(): Promise<void> {
+  const data = await request<unknown>('/api/account/export')
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'docfit-ai-data-export.json'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }

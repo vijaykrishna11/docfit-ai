@@ -339,3 +339,49 @@ export function FolderIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5.5l3.5 2" />
+    </svg>
+  )
+}
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="9" y="9" width="11" height="11" rx="1.5" />
+      <path d="M6 15H5.5A1.5 1.5 0 0 1 4 13.5v-8A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V6" />
+    </svg>
+  )
+}
+
+export function DownloadIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 4v11.5M8 12l4 4 4-4" />
+      <path d="M4.5 18.5v1a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-1" />
+    </svg>
+  )
+}
+
+export function ClipboardCheckIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="5" y="4.5" width="14" height="16" rx="1.5" />
+      <path d="M9 4.5V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v.5" />
+      <path d="m9 13 2 2 4-4.5" />
+    </svg>
+  )
+}
+
+export function GaugeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 12 15.2 8.8" />
+    </svg>
+  )
+}
