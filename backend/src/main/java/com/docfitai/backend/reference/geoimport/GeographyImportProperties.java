@@ -18,6 +18,8 @@ public class GeographyImportProperties {
     private String sourcePath = "classpath:geography/la-county-zip-geography.csv";
     private String sourceName = "U.S. Census Bureau 2024 ZCTA Gazetteer + 2020 ZCTA-County/Place Relationship Files";
     private String sourceVersion = "2024";
+    // Operator dry-run (CLAUDE.md "Operator Dry-Run"): parse/validate/count only, never write.
+    private boolean dryRun = false;
 
     public boolean isEnabled() {
         return enabled;
@@ -25,6 +27,14 @@ public class GeographyImportProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
     }
 
     public String getSourcePath() {

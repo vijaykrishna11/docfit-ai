@@ -43,9 +43,11 @@ public class GeographyImportRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws IOException {
-        Summary summary = importFrom(properties.getSourcePath(), properties.getSourceName(), properties.getSourceVersion());
+        Summary summary = importFrom(
+                properties.getSourcePath(), properties.getSourceName(), properties.getSourceVersion(), properties.isDryRun());
         log.info(
-                "Geography import complete: source={} recordsRead={} rowsCreated={} rowsUpdated={} recordsFailed={}",
+                "Geography import {}: source={} recordsRead={} rowsCreated={} rowsUpdated={} recordsFailed={}",
+                properties.isDryRun() ? "dry run complete (no data written)" : "complete",
                 properties.getSourcePath(),
                 summary.recordsRead(),
                 summary.rowsCreated(),
@@ -53,8 +55,18 @@ public class GeographyImportRunner implements CommandLineRunner {
                 summary.recordsFailed());
     }
 
-    /** Core logic, separated from {@link #run} so it's directly unit-testable without CommandLineRunner ceremony. */
+    /** Core logic, separated from {@link #run} so it's directly unit-testable without CommandLineRunner ceremony. Always writes (equivalent to {@code dryRun=false}). */
     public Summary importFrom(String sourcePath, String sourceName, String sourceVersion) throws IOException {
+        return importFrom(sourcePath, sourceName, sourceVersion, false);
+    }
+
+    /**
+     * @param dryRun when true, parses/validates/counts every row exactly as a real import would,
+     *     but never calls {@link GeographyUpsertService} -- nothing is written (CLAUDE.md "Operator
+     *     Dry-Run"). The create-vs-update split is still reliably calculable read-only (a ZIP
+     *     either already exists in {@code zip_geography} or it doesn't), so it is still reported.
+     */
+    public Summary importFrom(String sourcePath, String sourceName, String sourceVersion, boolean dryRun) throws IOException {
         Resource resource = resourceLoader.getResource(sourcePath);
         if (!resource.exists()) {
             log.warn("Configured geography source does not exist: {} -- skipping.", sourcePath);
@@ -84,7 +96,9 @@ public class GeographyImportRunner implements CommandLineRunner {
                 recordsRead++;
                 try {
                     GeographyRecord record = GeographyRecordParser.parseRow(header, line);
-                    boolean created = upsertService.upsert(record, sourceName, sourceVersion);
+                    boolean created = dryRun
+                            ? !upsertService.exists(record.zipCode())
+                            : upsertService.upsert(record, sourceName, sourceVersion);
                     if (created) {
                         rowsCreated++;
                     } else {

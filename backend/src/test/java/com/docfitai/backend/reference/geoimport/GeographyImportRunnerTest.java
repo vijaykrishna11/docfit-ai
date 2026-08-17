@@ -77,6 +77,22 @@ class GeographyImportRunnerTest extends PostgresIntegrationSupport {
     }
 
     @Test
+    void dryRunCountsWithoutWritingAnything() throws IOException {
+        String csv = HEADER + "99905,Dry Run City,CA,Test County,34.300000,-118.300000\n";
+        Path csvFile = tempDir.resolve("geography-dry-run.csv");
+        Files.writeString(csvFile, csv, StandardCharsets.UTF_8);
+
+        GeographyImportRunner runner = new GeographyImportRunner(
+                new GeographyImportProperties(), upsertService, new DefaultResourceLoader());
+
+        GeographyImportRunner.Summary summary = runner.importFrom(csvFile.toUri().toString(), "Test Source", "v1", true);
+
+        assertThat(summary.recordsRead()).isEqualTo(1);
+        assertThat(summary.rowsCreated()).isEqualTo(1);
+        assertThat(zipGeographyRepository.findById("99905")).isEmpty();
+    }
+
+    @Test
     void aMissingSourceFileIsSkippedGracefullyNotAnException() throws IOException {
         GeographyImportRunner runner = new GeographyImportRunner(
                 new GeographyImportProperties(), upsertService, new DefaultResourceLoader());

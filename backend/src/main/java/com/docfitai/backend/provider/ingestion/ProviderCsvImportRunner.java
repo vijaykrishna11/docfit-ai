@@ -35,22 +35,30 @@ public class ProviderCsvImportRunner implements CommandLineRunner {
     private final ProviderUpsertService upsertService;
     private final DataImportRepository dataImportRepository;
     private final ProviderDataQualityService dataQualityService;
+    private final ProviderCsvDryRunService dryRunService;
 
     public ProviderCsvImportRunner(
             ProviderCsvImportProperties properties,
             ProviderUpsertService upsertService,
             DataImportRepository dataImportRepository,
-            ProviderDataQualityService dataQualityService) {
+            ProviderDataQualityService dataQualityService,
+            ProviderCsvDryRunService dryRunService) {
         this.properties = properties;
         this.upsertService = upsertService;
         this.dataImportRepository = dataImportRepository;
         this.dataQualityService = dataQualityService;
+        this.dryRunService = dryRunService;
     }
 
     @Override
     public void run(String... args) throws IOException {
         if (properties.getSourceDirectory() == null || properties.getSourceDirectory().isBlank()) {
             log.warn("docfitai.import.csv.enabled=true but no source directory configured (docfitai.import.csv.source-directory) -- skipping.");
+            return;
+        }
+        if (properties.isDryRun()) {
+            // Parse/validate/count only -- never writes (CLAUDE.md "Operator Dry-Run").
+            dryRunService.analyze(properties.getSourceDirectory());
             return;
         }
         Path directory = Path.of(properties.getSourceDirectory());

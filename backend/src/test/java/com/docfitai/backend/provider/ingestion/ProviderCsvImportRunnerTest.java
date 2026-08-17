@@ -42,6 +42,9 @@ class ProviderCsvImportRunnerTest extends PostgresIntegrationSupport {
     @Autowired
     private ProviderLocationRepository providerLocationRepository;
 
+    @Autowired
+    private ProviderCsvDryRunService dryRunService;
+
     @TempDir
     Path tempDir;
 
@@ -60,7 +63,7 @@ class ProviderCsvImportRunnerTest extends PostgresIntegrationSupport {
         properties.setEnabled(true);
         properties.setSourceDirectory(tempDir.toString());
         ProviderCsvImportRunner runner =
-                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService);
+                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService, dryRunService);
 
         runner.run();
 
@@ -79,5 +82,28 @@ class ProviderCsvImportRunnerTest extends PostgresIntegrationSupport {
                 assertThat(dataImport.getStatus()).isIn(DataImportStatus.PARTIAL, DataImportStatus.COMPLETED);
             }
         });
+    }
+
+    @Test
+    void dryRunParsesAndCountsWithoutWritingAnything() throws IOException {
+        String csv = HEADER
+                + "6500000101,INDIVIDUAL,Dry,Run,,1 Office A,,Long Beach,CA,90802,562-555-0101,,33.77,-118.19,207RC0000X\n"
+                // Malformed: missing address_line_1 -- counted invalid, not written.
+                + "6500000102,INDIVIDUAL,Bad,Row,,,,,CA,90802,,,,,207RC0000X\n";
+        Path csvFile = tempDir.resolve("dry-run-providers.csv");
+        Files.writeString(csvFile, csv, StandardCharsets.UTF_8);
+
+        ProviderCsvImportProperties properties = new ProviderCsvImportProperties();
+        properties.setEnabled(true);
+        properties.setDryRun(true);
+        properties.setSourceDirectory(tempDir.toString());
+        ProviderCsvImportRunner runner =
+                new ProviderCsvImportRunner(properties, upsertService, dataImportRepository, dataQualityService, dryRunService);
+        long importsBefore = dataImportRepository.count();
+
+        runner.run();
+
+        assertThat(providerRepository.findByNpiNumber("6500000101")).isEmpty();
+        assertThat(dataImportRepository.count()).isEqualTo(importsBefore);
     }
 }

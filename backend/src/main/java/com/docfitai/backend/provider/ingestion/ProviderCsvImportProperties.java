@@ -15,6 +15,10 @@ public class ProviderCsvImportProperties {
     private boolean enabled = false;
     private String sourceDirectory;
     private int batchSize = 200;
+    // Operator dry-run (CLAUDE.md "Operator Dry-Run"): parse/validate/count only, never write to
+    // the database. Independent of `enabled` -- a dry run is meaningful even before an operator
+    // is ready to actually import.
+    private boolean dryRun = false;
 
     public boolean isEnabled() {
         return enabled;
@@ -22,6 +26,14 @@ public class ProviderCsvImportProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
     }
 
     public String getSourceDirectory() {

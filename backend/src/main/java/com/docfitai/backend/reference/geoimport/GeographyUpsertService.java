@@ -21,6 +21,11 @@ public class GeographyUpsertService {
         this.zipGeographyRepository = zipGeographyRepository;
     }
 
+    /** Read-only existence check, used by the dry-run path to compute a create-vs-update split without writing anything. */
+    public boolean exists(String zipCode) {
+        return zipGeographyRepository.existsById(zipCode);
+    }
+
     @Transactional
     public boolean upsert(GeographyRecord record, String sourceName, String sourceVersion) {
         Optional<ZipGeography> existing = zipGeographyRepository.findById(record.zipCode());
