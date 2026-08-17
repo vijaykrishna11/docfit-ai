@@ -64,7 +64,15 @@ export function setRefreshHandler(handler: (() => Promise<string | null>) | null
   refreshHandler = handler
 }
 
-function refreshAccessTokenOnce(): Promise<string | null> {
+/**
+ * Deduped: also used by AuthContext's own initial-mount session restore, not just the 401-retry
+ * path below -- React StrictMode's dev-only double-effect-invocation would otherwise fire two
+ * concurrent /api/auth/refresh calls on first mount, racing the single-use refresh-token rotation
+ * and sometimes leaving a freshly-registered/logged-in user logged out on the very next full page
+ * load (found via Playwright: a full `page.goto()` to any protected route right after
+ * registration reproduced this deterministically).
+ */
+export function refreshAccessTokenOnce(): Promise<string | null> {
   if (!refreshHandler) {
     return Promise.resolve(null)
   }

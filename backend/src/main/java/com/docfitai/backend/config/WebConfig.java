@@ -27,7 +27,11 @@ public class WebConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(allowedOrigins);
-        configuration.setAllowedMethods(List.of("GET", "POST", "DELETE", "PUT", "OPTIONS"));
+        // PATCH is required for display-name updates, shortlist/saved-search renames, and
+        // reminder completion toggles -- omitting it silently 403s the browser's CORS preflight
+        // for every PATCH endpoint (found via Playwright: reminder "mark as done" failed only in
+        // a real browser, never in a same-origin/unit-test context that skips CORS entirely).
+        configuration.setAllowedMethods(List.of("GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
 

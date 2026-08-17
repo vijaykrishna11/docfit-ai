@@ -103,9 +103,9 @@ function VerificationChecklist({
               </span>
               <span className="verification-checklist-label">{VERIFICATION_TYPE_LABELS[type]}</span>
               {isAuthenticated ? (
-                <label className="verification-checklist-status">
-                  <span className="visually-hidden">Status for: {VERIFICATION_TYPE_LABELS[type]}</span>
+                <span className="verification-checklist-status">
                   <select
+                    aria-label={`Status for: ${VERIFICATION_TYPE_LABELS[type]}`}
                     value={status}
                     disabled={savingType === type}
                     onChange={(event) => void handleChange(type, event.target.value as VerificationItemStatusValue)}
@@ -116,7 +116,7 @@ function VerificationChecklist({
                       </option>
                     ))}
                   </select>
-                </label>
+                </span>
               ) : (
                 <span className="verification-checklist-status-static">Sign in to track</span>
               )}

@@ -4,6 +4,7 @@ import {
   loginAccount,
   logoutAccount,
   refreshAccessToken,
+  refreshAccessTokenOnce,
   registerAccount,
   setAccessToken as setClientAccessToken,
   setRefreshHandler,
@@ -55,25 +56,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     async function restoreSession() {
-      try {
-        const result = await refreshAccessToken()
-        if (!cancelled) {
-          applySession(result.accessToken, result.user)
-        }
-      } catch {
-        // No valid refresh cookie (or it's expired/revoked) -- stay signed out. This is the
-        // expected path for first-time and already-signed-out visitors, not an error to surface.
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
+      // Goes through the same deduped single-flight path as the 401-retry mechanism (rather than
+      // calling refreshAccessToken()+applySession() directly) so that StrictMode's dev-only
+      // double-effect-invocation shares one in-flight request instead of racing two concurrent
+      // refreshes against the single-use refresh-token rotation. applySession happens inside the
+      // shared refreshHandler itself (registered by the effect above) on success or failure.
+      await refreshAccessTokenOnce()
+      if (!cancelled) {
+        setIsLoading(false)
       }
     }
     void restoreSession()
     return () => {
       cancelled = true
     }
-  }, [applySession])
+  }, [])
 
   const login = useCallback(
     async (email: string, password: string) => {

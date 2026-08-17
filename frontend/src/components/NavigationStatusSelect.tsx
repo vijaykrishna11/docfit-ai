@@ -30,9 +30,9 @@ function NavigationStatusSelect({
   }
 
   return (
-    <label className="navigation-status-select">
-      <span className="visually-hidden">Navigation status</span>
+    <span className="navigation-status-select">
       <select
+        aria-label="Navigation status"
         value={status}
         disabled={isSaving}
         onChange={(event) => void handleChange(event.target.value as NavigationStatusValue)}
@@ -43,7 +43,7 @@ function NavigationStatusSelect({
           </option>
         ))}
       </select>
-    </label>
+    </span>
   )
 }
 

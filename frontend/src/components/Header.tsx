@@ -186,6 +186,7 @@ function AccountMenu({ displayName, onSignOut }: { displayName: string; onSignOu
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label="Account menu"
       >
         <span className="avatar account-menu-avatar" aria-hidden="true">
           {initials || <UserIcon width={16} height={16} />}

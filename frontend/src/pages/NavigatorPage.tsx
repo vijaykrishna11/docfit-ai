@@ -111,12 +111,9 @@ function NavigatorPage() {
     setDashboard((current) => (current ? { ...current, savedPlan: plan } : current))
   }
 
-  const isEmpty =
-    dashboard != null &&
-    dashboard.providers.length === 0 &&
-    dashboard.shortlists.length === 0 &&
-    reminders.length === 0 &&
-    dashboard.savedPlan == null
+  // Reminders and a saved plan are useful even before a provider is saved -- only "Providers to
+  // consider" and "Shortlists" depend on having saved something (CLAUDE.md "Empty Navigator").
+  const hasNothingToOrganize = dashboard != null && dashboard.providers.length === 0 && dashboard.shortlists.length === 0
 
   return (
     <div className="page">
@@ -139,7 +136,7 @@ function NavigatorPage() {
           </div>
         )}
 
-        {status === 'success' && dashboard && isEmpty && (
+        {status === 'success' && dashboard && hasNothingToOrganize && (
           <div className="state-panel empty-panel">
             <div className="empty-panel-icon">
               <BookmarkIcon width={22} height={22} />
@@ -152,13 +149,15 @@ function NavigatorPage() {
           </div>
         )}
 
-        {status === 'success' && dashboard && !isEmpty && (
+        {status === 'success' && dashboard && (
           <>
-            <p className="navigator-summary">
-              {dashboard.savedCount} provider{dashboard.savedCount === 1 ? '' : 's'} saved &middot; {dashboard.toContactCount} still to
-              contact &middot; {Math.max(dashboard.savedCount - dashboard.verificationNeededCount, 0)} verification checklist
-              {dashboard.savedCount - dashboard.verificationNeededCount === 1 ? '' : 's'} complete
-            </p>
+            {!hasNothingToOrganize && (
+              <p className="navigator-summary">
+                {dashboard.savedCount} provider{dashboard.savedCount === 1 ? '' : 's'} saved &middot; {dashboard.toContactCount} still to
+                contact &middot; {Math.max(dashboard.savedCount - dashboard.verificationNeededCount, 0)} verification checklist
+                {dashboard.savedCount - dashboard.verificationNeededCount === 1 ? '' : 's'} complete
+              </p>
+            )}
 
             {dashboard.providers.length > 0 && (
               <section className="navigator-panel">

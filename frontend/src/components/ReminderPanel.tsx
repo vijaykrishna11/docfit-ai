@@ -100,9 +100,9 @@ function ReminderPanel({ reminders, onChanged }: { reminders: ReminderDto[]; onC
       <p className="results-subtext">Simple, in-app-only follow-ups. DocFit AI never sends email, SMS, or push notifications.</p>
 
       <div className="reminder-form">
-        <label className="field">
-          <span>What do you want to be reminded about?</span>
-          <select value={titleChoice} onChange={(event) => setTitleChoice(event.target.value)}>
+        <div className="field">
+          <label htmlFor="reminder-title-choice">What do you want to be reminded about?</label>
+          <select id="reminder-title-choice" value={titleChoice} onChange={(event) => setTitleChoice(event.target.value)}>
             {TITLE_PRESETS.map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -110,33 +110,38 @@ function ReminderPanel({ reminders, onChanged }: { reminders: ReminderDto[]; onC
             ))}
             <option value="custom">Custom&hellip;</option>
           </select>
-        </label>
+        </div>
         {titleChoice === 'custom' && (
-          <label className="field">
-            <span className="visually-hidden">Custom reminder title</span>
+          <div className="field">
+            <label htmlFor="reminder-custom-title" className="visually-hidden">
+              Custom reminder title
+            </label>
             <input
+              id="reminder-custom-title"
               type="text"
               maxLength={200}
               placeholder="e.g. Ask about weekend hours (avoid sharing medical details here)"
               value={customTitle}
               onChange={(event) => setCustomTitle(event.target.value)}
             />
-          </label>
+          </div>
         )}
-        <label className="field">
-          <span>When?</span>
-          <select value={preset} onChange={(event) => setPreset(event.target.value as Preset)}>
+        <div className="field">
+          <label htmlFor="reminder-preset">When?</label>
+          <select id="reminder-preset" value={preset} onChange={(event) => setPreset(event.target.value as Preset)}>
             <option value="tomorrow">Tomorrow</option>
             <option value="3days">In 3 days</option>
             <option value="nextweek">Next week</option>
             <option value="custom">Choose date&hellip;</option>
           </select>
-        </label>
+        </div>
         {preset === 'custom' && (
-          <label className="field">
-            <span className="visually-hidden">Reminder date</span>
-            <input type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
-          </label>
+          <div className="field">
+            <label htmlFor="reminder-custom-date" className="visually-hidden">
+              Reminder date
+            </label>
+            <input id="reminder-custom-date" type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
+          </div>
         )}
         {error && <p className="field-hint">{error}</p>}
         <button
