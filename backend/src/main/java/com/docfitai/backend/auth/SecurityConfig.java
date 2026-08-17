@@ -57,7 +57,8 @@ public class SecurityConfig {
                                 "/api/insurance-carriers",
                                 "/api/insurance/**",
                                 "/api/providers/**",
-                                "/api/locations/**")
+                                "/api/locations/**",
+                                "/api/discovery/**")
                         .permitAll()
                         // Directory-data correction reports (CLAUDE.md "Report Privacy"): anonymous
                         // submission is allowed by design, rate-limited by IP either way

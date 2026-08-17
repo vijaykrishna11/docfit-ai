@@ -1,5 +1,6 @@
 import type {
   AuthResponseDto,
+  CoverageDto,
   InsuranceCarrierDto,
   InsurancePlanDto,
   LocationSuggestionDto,
@@ -157,6 +158,10 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
 
 export function fetchSpecialties(): Promise<SpecialtyDto[]> {
   return request<SpecialtyDto[]>('/api/specialties')
+}
+
+export function fetchCoverage(): Promise<CoverageDto> {
+  return request<CoverageDto>('/api/discovery/coverage')
 }
 
 /** @deprecated Legacy, purely informational carrier list. Superseded by fetchPayers()/fetchPayerPlans(). */

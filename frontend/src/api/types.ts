@@ -4,6 +4,15 @@ export interface SpecialtyDto {
   description: string
 }
 
+/** Real, runtime-queried counts only -- never a hardcoded/marketing number. */
+export interface CoverageDto {
+  providerCount: number
+  locationCount: number
+  specialtyCount: number
+  areas: string[]
+  lastImportCompletedAt: string | null
+}
+
 export interface InsuranceCarrierDto {
   id: number
   name: string
