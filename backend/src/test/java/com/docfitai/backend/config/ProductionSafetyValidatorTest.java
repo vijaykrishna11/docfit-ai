@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 class ProductionSafetyValidatorTest {
 
     private static final String GOOD_SECRET = "a-genuinely-random-production-secret-value-1234567890";
+    private static final String GOOD_DB_PASSWORD = "a-genuinely-random-production-db-password";
 
     @Test
     void refusesTheKnownDevPlaceholderSecret() {
@@ -23,63 +24,88 @@ class ProductionSafetyValidatorTest {
                         false,
                         false,
                         false,
-                        false))
+                        false,
+                        GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("jwt-secret");
     }
 
     @Test
     void refusesAShortSecret() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator("too-short", true, "https://app.docfit.example", false, false, false, false))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        "too-short", true, "https://app.docfit.example", false, false, false, false, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("jwt-secret");
     }
 
     @Test
     void refusesAnInsecureCookie() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator(GOOD_SECRET, false, "https://app.docfit.example", false, false, false, false))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, false, "https://app.docfit.example", false, false, false, false, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("cookie-secure");
     }
 
     @Test
     void refusesLocalhostCorsOrigin() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator(GOOD_SECRET, true, "http://localhost:5173", false, false, false, false))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "http://localhost:5173", false, false, false, false, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("cors");
     }
 
     @Test
     void refusesSyntheticInsuranceEnabled() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator(GOOD_SECRET, true, "https://app.docfit.example", true, false, false, false))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", true, false, false, false, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("synthetic-demo");
     }
 
     @Test
     void refusesCsvImportEnabled() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator(GOOD_SECRET, true, "https://app.docfit.example", false, true, false, false))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", false, true, false, false, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("csv.enabled");
     }
 
     @Test
     void refusesGeographyImportEnabled() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator(GOOD_SECRET, true, "https://app.docfit.example", false, false, true, false))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", false, false, true, false, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("geography.enabled");
     }
 
     @Test
     void refusesGeocodeEnabled() {
-        assertThatThrownBy(() -> new ProductionSafetyValidator(GOOD_SECRET, true, "https://app.docfit.example", false, false, false, true))
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", false, false, false, true, GOOD_DB_PASSWORD))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("geocode.enabled");
     }
 
     @Test
+    void refusesAKnownPlaceholderDatabasePassword() {
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", false, false, false, false, "changeme"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("datasource.password");
+    }
+
+    @Test
+    void refusesAMissingDatabasePassword() {
+        assertThatThrownBy(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", false, false, false, false, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("datasource.password");
+    }
+
+    @Test
     void acceptsAFullySafeProductionConfiguration() {
-        assertThatCode(() -> new ProductionSafetyValidator(GOOD_SECRET, true, "https://app.docfit.example", false, false, false, false))
+        assertThatCode(() -> new ProductionSafetyValidator(
+                        GOOD_SECRET, true, "https://app.docfit.example", false, false, false, false, GOOD_DB_PASSWORD))
                 .doesNotThrowAnyException();
     }
 }

@@ -40,7 +40,8 @@ public class ProductionSafetyEnvironmentListener
                 resolveBoolean(environment, "docfitai.insurance.synthetic-demo.enabled"),
                 resolveBoolean(environment, "docfitai.import.csv.enabled"),
                 resolveBoolean(environment, "docfitai.import.geography.enabled"),
-                resolveBoolean(environment, "docfitai.geocode.enabled"));
+                resolveBoolean(environment, "docfitai.geocode.enabled"),
+                resolve(environment, "spring.datasource.password"));
     }
 
     /**

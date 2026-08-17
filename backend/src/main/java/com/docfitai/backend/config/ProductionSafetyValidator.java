@@ -30,6 +30,9 @@ public class ProductionSafetyValidator {
     private static final Set<String> KNOWN_INSECURE_JWT_SECRETS =
             Set.of("dev-only-insecure-secret-change-in-production-please-0123456789", "changeme", "secret", "");
     private static final int MIN_JWT_SECRET_LENGTH = 32;
+    // application.properties's local-dev default for spring.datasource.password -- must never
+    // reach a real production database (release-prep finding: this was previously unguarded).
+    private static final Set<String> KNOWN_INSECURE_DB_PASSWORDS = Set.of("changeme", "password", "postgres", "");
 
     public ProductionSafetyValidator(
             String jwtSecret,
@@ -38,7 +41,8 @@ public class ProductionSafetyValidator {
             boolean syntheticInsuranceEnabled,
             boolean csvImportEnabled,
             boolean geographyImportEnabled,
-            boolean geocodeEnabled) {
+            boolean geocodeEnabled,
+            String datasourcePassword) {
         List<String> problems = new ArrayList<>();
 
         if (jwtSecret == null) {
@@ -51,6 +55,11 @@ public class ProductionSafetyValidator {
             problems.add(
                     "docfitai.auth.jwt-secret (JWT_SECRET) is missing, a known placeholder, or too short. "
                             + "Set a real, random 256-bit+ secret.");
+        }
+        if (datasourcePassword == null || KNOWN_INSECURE_DB_PASSWORDS.contains(datasourcePassword)) {
+            problems.add(
+                    "spring.datasource.password (POSTGRES_PASSWORD) is missing or a known placeholder -- "
+                            + "set the real managed-database password.");
         }
         if (!cookieSecure) {
             problems.add(

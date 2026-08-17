@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.docfitai</groupId>
 	<artifactId>backend</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.1.0-beta.1</version>
 	<name>backend</name>
 	<description>DocFit AI backend</description>
 	<url/>
