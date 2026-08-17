@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 @Table(name = "zip_geography")
@@ -33,6 +34,17 @@ public class ZipGeography {
     @Column(nullable = false, precision = 9, scale = 6)
     private BigDecimal longitude;
 
+    // Provenance (CLAUDE.md "Geography Provenance"): where these coordinates came from, which
+    // source/version, when imported. Nullable -- not every row is required to carry it.
+    @Column(name = "source_name")
+    private String sourceName;
+
+    @Column(name = "source_version")
+    private String sourceVersion;
+
+    @Column(name = "source_imported_at")
+    private Instant sourceImportedAt;
+
     protected ZipGeography() {
     }
 
@@ -52,19 +64,57 @@ public class ZipGeography {
         return city;
     }
 
+    public void setCity(String city) {
+        this.city = city;
+    }
+
     public String getStateCode() {
         return stateCode;
+    }
+
+    public void setStateCode(String stateCode) {
+        this.stateCode = stateCode;
     }
 
     public String getCounty() {
         return county;
     }
 
+    public void setCounty(String county) {
+        this.county = county;
+    }
+
     public BigDecimal getLatitude() {
         return latitude;
     }
 
+    public void setLatitude(BigDecimal latitude) {
+        this.latitude = latitude;
+    }
+
     public BigDecimal getLongitude() {
         return longitude;
+    }
+
+    public void setLongitude(BigDecimal longitude) {
+        this.longitude = longitude;
+    }
+
+    public String getSourceName() {
+        return sourceName;
+    }
+
+    public String getSourceVersion() {
+        return sourceVersion;
+    }
+
+    public Instant getSourceImportedAt() {
+        return sourceImportedAt;
+    }
+
+    public void setProvenance(String sourceName, String sourceVersion, Instant sourceImportedAt) {
+        this.sourceName = sourceName;
+        this.sourceVersion = sourceVersion;
+        this.sourceImportedAt = sourceImportedAt;
     }
 }
