@@ -137,9 +137,54 @@ to using `idx_provider_location_lat_lng` via an Index Scan for both the common a
 case. This is the crossover point the original bounding-box work was built for, now observed
 directly rather than assumed.
 
-**Not attempted this phase**: 50,000- and 100,000-row benchmarks. The 10,000-row result above was
-judged sufficient evidence for this phase's scope (LA County readiness, not yet California-wide);
-a larger synthetic run is a reasonable next step before a genuinely large real import, not before.
+## 50,000- and 100,000-row benchmarks (LA County Expansion V5.1)
+
+Run this phase, same rolled-back-transaction methodology as the 10,000-row benchmark above, but
+with a specialty-mix distribution drawn from **this phase's own real measured LA County import**
+(`docs/la-county-provider-import.md`) rather than a guess -- Psychiatry/Mental Health ~53% down to
+Allergy & Immunology ~0.3% of synthetic rows (normalized relative weights, since a real provider can
+carry more than one specialty so the raw per-specialty counts don't sum to the provider total).
+Against the real dev database (already carrying the 5,854 real providers imported this phase), so
+these numbers reflect real-plus-synthetic combined table size (~55,854 and ~105,854 respectively):
+
+```
+                          |    50k run    |   100k run
+Common specialty (Primary Care), 25mi box  |  82.4ms       |  127.3ms
+Rare specialty (Allergy & Immunology), 50mi|  2.2ms        |  4.6ms
+Name search (ILIKE, full sequential scan)  |  66.0ms       |  144.4ms
+Provider detail (single NPI lookup)        |  0.31ms       |  0.28ms
+```
+
+**Query plan behavior, honestly reported (a real finding, not the same shape as the 10,000-row
+result)**: at this larger scale, the planner chose a **sequential scan on `provider_location`**
+for the common-specialty query (not an Index Scan on `idx_provider_location_lat_lng` as at 10,000
+rows) -- because the taxonomy filter (`provider_taxonomy` via `idx_provider_taxonomy_taxonomy_code`)
+already narrows the candidate set enough first that a hash join against a full `provider_location`
+scan is cheaper than a location-index lookup per candidate. This is the query planner making a
+different, still-correct cost-based choice at a different data shape -- not a regression, and still
+well under 100ms even at 100k rows for the more selective case, and ~127ms for the least selective
+realistic case (Primary Care, the single most common specialty).
+
+**Name search scales roughly linearly with table size, as predicted.** 66.0ms at 50k -> 144.4ms at
+100k (a real measurement, not the 10,000-row benchmark's linear extrapolation, which predicted
+~80ms/~160ms -- the real numbers came in slightly better than that extrapolation). This confirms
+CLAUDE.md's own concern: this is the one query in the whole benchmark that doesn't benefit from a
+targeted index and will keep growing with table size.
+
+**`pg_trgm` decision: still deferred, evidence-based.** Even at 100k rows (roughly 18x DocFit's
+real current 5,854-provider dataset), name search stays at 144ms -- noticeable in a strict sense,
+but not "clearly, measurably slow" by any normal UX bar for a full search-endpoint round trip, and
+nowhere close to a level that would justify adopting a new Postgres extension pre-emptively
+(CLAUDE.md 64: "only if measured, not preemptively"). This is the same conclusion the 10,000-row
+benchmark reached, now backed by real 50k/100k evidence instead of extrapolation. Revisit this
+specific query if DocFit's real provider count ever grows into this range -- LA County's real
+provider population, even fully imported, is very unlikely to reach 100k in DocFit's own database
+(that would require importing essentially the county's entire physician population at once).
+
+**Safety**: both runs completed entirely inside `BEGIN`/`ROLLBACK` against the real dev database --
+never committed, never left any synthetic row behind. A 250,000-row run was not attempted this
+phase (not required once 100k's results were unambiguous and consistent with the 50k trend; time
+was better spent on the phase's other open items).
 
 ## Indexes added, and why
 
