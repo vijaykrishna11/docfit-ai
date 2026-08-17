@@ -30,6 +30,15 @@ class GeographyRecordParserTest {
     }
 
     @Test
+    void cityIsOptional() {
+        // A real, legitimate LA County ZCTA can have no resolvable primary city (CLAUDE.md "City
+        // Representation Limitations") -- never rejected, never fabricated.
+        GeographyRecord record = GeographyRecordParser.parseRow(HEADER, "93553,,CA,Los Angeles,34.445239,-117.894868");
+        assertThat(record.city()).isNull();
+        assertThat(record.zipCode()).isEqualTo("93553");
+    }
+
+    @Test
     void rejectsAMalformedZipCode() {
         assertThatThrownBy(() -> GeographyRecordParser.parseRow(HEADER, "ABC12,Long Beach,CA,Los Angeles,33.77,-118.19"))
                 .isInstanceOf(IllegalArgumentException.class)

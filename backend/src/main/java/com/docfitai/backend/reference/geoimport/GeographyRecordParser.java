@@ -12,10 +12,12 @@ import java.util.Map;
  * {@code ProviderCsvRecordParser}'s convention -- directly unit testable.
  *
  * <p>Expected header (order-independent by name): {@code zip_code,city,state_code,county,latitude,
- * longitude}. {@code county} is optional (CLAUDE.md "County": never inferred if the source
- * genuinely doesn't supply one). Deliberately simple comma-splitting, not full RFC 4180 quoted-
- * field parsing -- same rationale as the provider CSV importer (bounded, operator-prepared files,
- * not arbitrary untrusted uploads).
+ * longitude}. {@code county} and {@code city} are both optional (CLAUDE.md "County"/"City
+ * Representation Limitations": never inferred or fabricated if the source genuinely doesn't supply
+ * one -- a ZCTA whose majority land area isn't inside any incorporated place or Census Designated
+ * Place has no honest primary city to report, see {@code docs/la-county-geography-sources.md}).
+ * Deliberately simple comma-splitting, not full RFC 4180 quoted-field parsing -- same rationale as
+ * the provider CSV importer (bounded, operator-prepared files, not arbitrary untrusted uploads).
  */
 public final class GeographyRecordParser {
 
@@ -52,7 +54,7 @@ public final class GeographyRecordParser {
         if (!zipCode.matches("\\d{5}")) {
             throw new IllegalArgumentException("Invalid zip_code (must be 5 digits): " + zipCode);
         }
-        String city = required(row, "city");
+        String city = blankToNull(row.get("city"));
         String stateCode = required(row, "state_code").toUpperCase(Locale.ROOT);
         if (stateCode.length() != 2) {
             throw new IllegalArgumentException("Invalid state_code (must be 2 letters): " + stateCode);

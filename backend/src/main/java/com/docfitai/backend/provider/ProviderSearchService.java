@@ -353,13 +353,15 @@ public class ProviderSearchService {
         return new Origin(
                 zipGeography.getLatitude().doubleValue(),
                 zipGeography.getLongitude().doubleValue(),
-                zipGeography.getCity() + ", " + zipGeography.getStateCode());
+                originLabel(zipGeography));
     }
 
     private Origin originFromCity(String location) {
         String cityPart = location.split(",")[0].trim();
+        // A real, legitimate LA County ZCTA can have no resolvable primary city (CLAUDE.md "City
+        // Representation Limitations") -- guard against a null city rather than NPE-ing on it.
         List<ZipGeography> matches = zipGeographyRepository.findAll().stream()
-                .filter(zipGeography -> zipGeography.getCity().equalsIgnoreCase(cityPart))
+                .filter(zipGeography -> cityPart.equalsIgnoreCase(zipGeography.getCity()))
                 .toList();
         if (matches.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown location: " + location);
@@ -368,7 +370,13 @@ public class ProviderSearchService {
                 matches.stream().mapToDouble(z -> z.getLatitude().doubleValue()).average().orElseThrow();
         double avgLon =
                 matches.stream().mapToDouble(z -> z.getLongitude().doubleValue()).average().orElseThrow();
-        return new Origin(avgLat, avgLon, matches.get(0).getCity() + ", " + matches.get(0).getStateCode());
+        return new Origin(avgLat, avgLon, originLabel(matches.get(0)));
+    }
+
+    private static String originLabel(ZipGeography zipGeography) {
+        return zipGeography.getCity() != null
+                ? zipGeography.getCity() + ", " + zipGeography.getStateCode()
+                : zipGeography.getZipCode() + ", " + zipGeography.getStateCode();
     }
 
     static double haversineMiles(double lat1, double lon1, double lat2, double lon2) {

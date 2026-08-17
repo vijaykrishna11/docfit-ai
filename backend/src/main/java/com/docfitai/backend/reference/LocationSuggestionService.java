@@ -26,15 +26,21 @@ public class LocationSuggestionService {
 
         return zipGeographyRepository.findAll().stream()
                 .filter(zip -> normalized.isEmpty()
-                        || zip.getCity().toLowerCase().contains(normalized)
+                        || cityOrEmpty(zip).toLowerCase().contains(normalized)
                         || zip.getZipCode().startsWith(normalized))
-                .sorted(Comparator.comparing(ZipGeography::getCity).thenComparing(ZipGeography::getZipCode))
+                .sorted(Comparator.comparing(LocationSuggestionService::cityOrEmpty).thenComparing(ZipGeography::getZipCode))
                 .limit(MAX_RESULTS)
                 .map(zip -> new LocationSuggestionDto(
                         zip.getZipCode(),
                         zip.getCity(),
                         zip.getStateCode(),
-                        zip.getZipCode() + " — " + zip.getCity() + ", " + zip.getStateCode()))
+                        zip.getZipCode() + " — " + (zip.getCity() != null ? zip.getCity() + ", " : "") + zip.getStateCode()))
                 .toList();
+    }
+
+    // A real, legitimate LA County ZCTA can have no resolvable primary city (CLAUDE.md "City
+    // Representation Limitations") -- never treat null as a match/sort failure.
+    private static String cityOrEmpty(ZipGeography zip) {
+        return zip.getCity() == null ? "" : zip.getCity();
     }
 }

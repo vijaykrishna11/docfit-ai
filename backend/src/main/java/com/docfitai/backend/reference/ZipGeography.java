@@ -15,7 +15,11 @@ public class ZipGeography {
     @Column(name = "zip_code", length = 5)
     private String zipCode;
 
-    @Column(nullable = false)
+    // Nullable: a real, legitimate LA County ZCTA can have no resolvable primary city (CLAUDE.md
+    // "City Representation Limitations" -- see docs/la-county-geography-sources.md) when the
+    // majority of its land area isn't inside any incorporated place or Census Designated Place.
+    // Never fabricated -- left genuinely empty rather than guessed (V18 migration).
+    @Column
     private String city;
 
     @Column(name = "state_code", nullable = false, length = 2)
