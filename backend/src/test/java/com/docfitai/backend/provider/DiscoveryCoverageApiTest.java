@@ -41,6 +41,11 @@ class DiscoveryCoverageApiTest extends PostgresIntegrationSupport {
 
         assertThat(coverage.providerCount()).isEqualTo(providerCountBefore + 1);
         assertThat(coverage.specialtyCount()).isPositive();
-        assertThat(coverage.areas()).isNotEmpty();
+        // Reference geography and actual provider coverage are reported separately (CLAUDE.md
+        // "Reference Geography vs. Provider Data") -- neither may be conflated with the other.
+        assertThat(coverage.geographyZipCount()).isPositive();
+        assertThat(coverage.providerZipCount()).isPositive();
+        assertThat(coverage.sampleProviderAreas()).isNotEmpty();
+        assertThat(coverage.sampleProviderAreas()).contains("Long Beach, CA");
     }
 }

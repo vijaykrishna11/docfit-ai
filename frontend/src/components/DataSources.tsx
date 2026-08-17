@@ -66,13 +66,27 @@ function DataSources() {
                 <dd>{coverage.specialtyCount}</dd>
               </div>
               <div>
-                <dt>Areas currently imported</dt>
-                <dd>{coverage.areas.join(', ') || 'None yet'}</dd>
+                <dt>Cities with imported provider data</dt>
+                <dd>{coverage.providerCityCount.toLocaleString()}</dd>
               </div>
             </dl>
             <p className="field-hint">
-              These are real, live counts from DocFit AI's own database -- not marketing figures. Coverage today
-              is limited to the areas listed above; it does not yet represent full county or statewide coverage.
+              Currently imported provider data covers:{' '}
+              {coverage.sampleProviderAreas.join(', ') || 'no areas yet'}
+              {coverage.sampleProviderAreasTruncated ? ', and more' : ''}.
+            </p>
+            {coverage.geographyZipCount > 0 && (
+              <p className="field-hint">
+                DocFit AI also has reference geography (ZIP/city/county lookup data, not provider
+                records) for {coverage.geographyZipCount.toLocaleString()} ZIP codes across{' '}
+                {coverage.geographyCityCount.toLocaleString()} cities
+                {coverage.geographySource ? ` (source: ${coverage.geographySource})` : ''}. This is
+                not the same as having provider data for all of those areas.
+              </p>
+            )}
+            <p className="field-hint">
+              These are real, live counts from DocFit AI's own database -- not marketing figures.
+              Coverage today is partial; it does not represent full county or statewide coverage.
             </p>
           </div>
         )}

@@ -9,7 +9,16 @@ export interface CoverageDto {
   providerCount: number
   locationCount: number
   specialtyCount: number
-  areas: string[]
+  // Reference geography DocFit knows about (zip_geography) -- not a claim that provider data was
+  // imported for all of it. See providerZipCount/providerCityCount for what was actually imported.
+  geographyZipCount: number
+  geographyCityCount: number
+  geographyCountyCount: number
+  geographySource: string | null
+  providerZipCount: number
+  providerCityCount: number
+  sampleProviderAreas: string[]
+  sampleProviderAreasTruncated: boolean
   lastImportCompletedAt: string | null
 }
 
