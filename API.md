@@ -140,18 +140,58 @@ unchanged, and `networkEvidence` is simply `null`. An unknown `planId` degrades 
 
 ## `GET /api/locations/suggestions`
 
-Suggests locations from DocFit AI's local demo geography only (no external geocoder).
+Suggests locations from DocFit AI's real loaded LA County reference geography (no external
+geocoder). Deduplicated and ranked (Location Suggestions V3): exact ZIP match, exact city-prefix
+match, ZIP-prefix match, then weaker city-contains-anywhere, bounded to 8 results. `type` tells the
+client the precision honesty to communicate if this suggestion is selected -- a `ZIP` suggestion
+resolves to that one ZIP's centroid; a `CITY` suggestion (one entry per distinct city, never one
+per ZIP within it, so `zipCode`/`city` may be `null` on the underlying row only for `city` when a
+ZIP has no resolvable primary place) resolves to a city-wide average, never a single ZIP's point.
 
 | Param | Required | Description |
 |---|---|---|
-| `q` | no | Free-text query; matches city name (contains, case-insensitive) or ZIP prefix. Empty returns the first few supported locations. |
+| `q` | no | Free-text query; matches city name (prefix or contains, case-insensitive) or ZIP prefix. Empty returns a bounded, deduplicated set of cities. |
 
 **Example**: `GET /api/locations/suggestions?q=long`
 ```json
 [
-  { "zipCode": "90802", "city": "Long Beach", "stateCode": "CA", "label": "90802 — Long Beach, CA" },
-  { "zipCode": "90803", "city": "Long Beach", "stateCode": "CA", "label": "90803 — Long Beach, CA" }
+  { "zipCode": null, "city": "Long Beach", "stateCode": "CA", "label": "Long Beach, CA", "type": "CITY" }
 ]
+```
+
+**Example**: `GET /api/locations/suggestions?q=908`
+```json
+[
+  { "zipCode": "90802", "city": "Long Beach", "stateCode": "CA", "label": "90802 — Long Beach, CA", "type": "ZIP" },
+  { "zipCode": "90803", "city": "Long Beach", "stateCode": "CA", "label": "90803 — Long Beach, CA", "type": "ZIP" }
+]
+```
+
+---
+
+## `GET /api/discovery/coverage`
+
+Public, read-only. Real, live-queried counts only — never a hardcoded or marketing number.
+Deliberately separates reference geography (what DocFit AI knows about) from actual provider
+coverage (where provider data was really imported) as two distinct figures — see
+`docs/data-coverage.md`.
+
+**Example**:
+```json
+{
+  "providerCount": 5854,
+  "locationCount": 8095,
+  "specialtyCount": 19,
+  "geographyZipCount": 295,
+  "geographyCityCount": 89,
+  "geographyCountyCount": 1,
+  "geographySource": "U.S. Census Bureau 2024 ZCTA Gazetteer + 2020 ZCTA-County/Place Relationship Files (2024)",
+  "providerZipCount": 890,
+  "providerCityCount": 78,
+  "sampleProviderAreas": ["Alhambra, CA", "Altadena, CA", "..."],
+  "sampleProviderAreasTruncated": true,
+  "lastImportCompletedAt": "2026-08-17T18:23:22.822641Z"
+}
 ```
 
 ---

@@ -4,16 +4,23 @@ Operator runbook for provider data imports/refreshes. Companion docs: `docs/prov
 (architecture), `docs/data-coverage.md` (current real numbers), `docs/provider-source-research.md`
 (source decisions).
 
-## Import modes
+## Import/refresh modes (LA County Expansion V5.1 adds four more)
 
 | Mode | Trigger | Default |
 |---|---|---|
-| NPPES (live API) | `./mvnw spring-boot:run -Dspring-boot.run.profiles=import` | Never runs automatically -- requires the explicit `import` Spring profile |
+| Geography reference import | `docfitai.import.geography.enabled=true` | `enabled=false` |
+| NPPES bulk import (live API, ZIP-scoped) | `./mvnw spring-boot:run -Dspring-boot.run.profiles=import` (optionally bounded via `DOCFIT_NPPES_IMPORT_ZIP_CODES`) | Never runs automatically -- requires the explicit `import` Spring profile |
 | CSV (bounded, operator-prepared files) | `docfitai.import.csv.enabled=true` + `docfitai.import.csv.source-directory=<path>` | `enabled=false` |
+| NPPES refresh (bounded NPI list) | `SPRING_PROFILES_ACTIVE=refresh` + `DOCFIT_REFRESH_NPIS=<comma-list>` | Never runs automatically -- requires the explicit `refresh` Spring profile |
+| Refresh scheduler (recurring, same NPI list) | `DOCFIT_PROVIDER_REFRESH_ENABLED=true` | `enabled=false` everywhere, including `prod` |
+| Address geocoding batch | `DOCFIT_GEOCODE_ENABLED=true` | `enabled=false` |
+| Dry-run (CSV or geography) | `DOCFIT_PROVIDER_CSV_DRY_RUN=true` / `DOCFIT_GEOGRAPHY_DRY_RUN=true` | `false` |
 
-Neither mode ever runs as part of normal application startup, regardless of environment
-(CLAUDE.md "Do Not Auto-Download Nationwide NPPES"). A production deployment's normal boot never
-triggers a provider import.
+None of these ever runs as part of normal application startup unless explicitly enabled
+(CLAUDE.md "Do Not Auto-Download Nationwide NPPES") -- a production deployment's normal boot never
+triggers a provider import, geography import, refresh, or geocode. Full command examples for every
+mode: `docs/operations-runbook.md` ("Operator CLI reference"). There is deliberately no public HTTP
+endpoint for any of these -- all are CLI/profile/flag-gated.
 
 ## Starting an import
 
@@ -95,8 +102,17 @@ WHERE source_import_id = <the data_import.id from the run>
 ORDER BY created_at DESC;
 ```
 
-No user-facing UI surfaces this yet (CLAUDE.md "Provider Change UI": deliberately deferred this
-phase, "focus this phase on data pipeline") -- it's an operator/database-query-only signal today.
+**As of LA County Expansion V5.1**, `ProviderChangeSummaryService` automatically logs a short,
+human-readable summary at the end of every NPPES/CSV import -- "2 locations added, 1 phone number
+changed, 1 provider name changed" (or "No tracked changes" if nothing did) -- so an operator
+doesn't have to run the SQL above just to get the gist. The raw query above is still the way to see
+individual changes.
+
+No user-facing UI surfaces this yet (CLAUDE.md "Provider Change UI": deliberately deferred --
+this phase's real LA County import happened to produce zero change events of its own, mostly
+re-touches of identical data within one run, so there's no real change data yet to build and demo
+a saved-provider-facing view against). Still an operator/database-query-plus-log-line signal today,
+not a product feature.
 
 ## Rollback
 

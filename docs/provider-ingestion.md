@@ -105,12 +105,19 @@ silently misparsed.
 
 ## Import provenance (`data_import`)
 
-Both importers write one `data_import` row per run: `source` (`NPPES` or `CSV`), `started_at`,
-`completed_at`, `status` (`RUNNING` → `COMPLETED`/`PARTIAL`/`FAILED`), and counts
-(`records_read`, `providers_created`, `providers_updated`, `locations_created`,
-`locations_updated`, `records_failed`). `PARTIAL` means some records failed but at least one
-provider was created/updated — a single bad row never turns a mostly-successful import into a
-hard failure.
+Every importer/refresher writes one `data_import` row per run: `source` (`NPPES`, `CSV`, or --
+new in LA County Expansion V5.1 -- `NPPES_REFRESH`), `started_at`, `completed_at`, `status`
+(`RUNNING` → `COMPLETED`/`PARTIAL`/`FAILED`), and counts (`records_read`, `providers_created`,
+`providers_updated`, `locations_created`, `locations_updated`, `records_failed`). `PARTIAL` means
+some records failed but at least one provider was created/updated — a single bad row never turns a
+mostly-successful import into a hard failure. Also new this phase: `scope_type` (always `PARTIAL`
+so far -- no importer here has a source-guaranteed-complete query yet) and `scope_description`
+(a short, human-readable statement of exactly what was queried, e.g. "NPPES API, 30 ZIP(s), up to 3
+page(s)... per ZIP/entity-type combination").
+
+An operator-friendly change summary is also logged automatically at the end of every NPPES/CSV
+import ("2 locations added, 1 phone number changed, 1 provider name changed") --
+`ProviderChangeSummaryService`, see `docs/data-refresh-operations.md` ("Change events").
 
 ## Data quality report
 
@@ -165,3 +172,14 @@ DocFit AI category and were therefore skipped by the importer (`skippedNoTaxonom
 in the earlier run). 13 of the 14 new specialty categories returned real search results afterward
 (`docs/data-coverage.md` has the full per-specialty counts); this is real evidence the "no code
 change needed" architecture claim holds, not just reasoning about it.
+
+### The LA County Expansion V5.1 import (real 30-ZIP bounded run)
+
+The biggest real import this codebase has run: 30 ZIPs (chosen for geographic breadth across LA
+County, not just the original 6), 146 requests, 5,272 providers created, 758 updated, 7,260
+locations created, only 2 individual records failed (a genuine NPPES `state_code` data anomaly,
+each failing independently without a half-written provider). Full plan, results, and per-specialty
+breakdown: `docs/la-county-provider-import.md`. The importer itself needed one real change to
+support this scale correctly: pagination past the API's undocumented 200-result-per-request cap
+(`NppesImportRunner`'s `MAX_PAGES_PER_QUERY`) — previously any ZIP+entity-type combination with
+more than 200 real matches was silently truncated with no indication of it anywhere.

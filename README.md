@@ -21,10 +21,13 @@ data, a real search/filter/compare flow, and clear limits on what the product ac
 
 ## Current features
 
-- Specialty search across 5 specialty groups, backed by verified NUCC taxonomy mappings
+- Specialty search across 19 specialty categories, backed by verified NUCC taxonomy mappings
 - Location search by ZIP code, city name (e.g. "Long Beach" or "Long Beach, CA"), or the
   browser Geolocation API ("Use my location")
-- Local location suggestions as you type (no external geocoder)
+- Deduplicated, ranked location suggestions as you type, from real loaded LA County reference
+  geography (no external geocoder used for search-time suggestions; an optional, operator-only
+  Census Geocoder pipeline exists for ingestion-time address precision — see
+  `docs/geocoding-strategy.md`)
 - Adjustable search radius (5 / 10 / 25 / 50 miles), applied server-side
 - Haversine-based approximate distance, nearest-first or name A–Z/Z–A sorting, pagination
 - Shareable/bookmarkable search URLs (specialty, location, radius, sort, and page all live in
@@ -154,12 +157,18 @@ Flyway-managed table groups. Provider **identity** (`provider`) and **practice l
   covering both individual (NPI-1) and organization (NPI-2) providers whose taxonomy matches one
   of DocFit AI's supported specialties, including every real practice location NPPES reports per
   provider (its primary location plus any additional offices in NPPES's own `practiceLocations`
-  field). A bounded, off-by-default CSV importer also exists for operator-supplied data — see
-  `docs/provider-ingestion.md`. Both importers are idempotent (safe to re-run) and are manual,
-  explicitly-triggered runs — never a scheduled job, never triggered by a request.
-- **Geography**: a small, intentionally limited demo set of ZIP codes covering Long Beach and
-  nearby Los Angeles County (90802, 90803, 90806, 90815, 90712, 90755), sourced from U.S. Census
-  ZCTA reference data. Location search and suggestions only work within this demo area.
+  field). 5,854 real providers / 8,095 locations currently loaded, from a bounded 30-ZIP import
+  across LA County (`docs/la-county-provider-import.md`) — a real, meaningful expansion, but still
+  partial, not full LA County coverage; `docs/data-coverage.md` has the current honest snapshot. A
+  bounded, off-by-default CSV importer also exists for operator-supplied data, plus an
+  operator-triggered refresh-by-NPI-list path and an optional (off-by-default) refresh scheduler —
+  see `docs/provider-ingestion.md` and `docs/operations-runbook.md`. Every import/refresh mode is
+  idempotent (safe to re-run) and manual/CLI-triggered — never a public HTTP endpoint.
+- **Geography**: 295 real ZIP Code Tabulation Areas (ZCTAs) across Los Angeles County, sourced
+  directly from U.S. Census Bureau files (`docs/la-county-geography-sources.md`) — a real step up
+  from the original 6-ZIP Long Beach demo footprint. Having this reference geography loaded is not
+  the same as having provider data for all of it — only 30 of the 295 ZIPs were directly queried
+  for providers so far. Location search and suggestions work anywhere within the loaded geography.
 - **Insurance**: a static list of well-known carrier names (legacy, informational only) plus a
   real payer/plan/network/evidence domain model. Only one payer ("DocFit Demo Network") has
   integrated plan data today, and it is clearly labeled synthetic demo data end-to-end — see
@@ -266,7 +275,11 @@ Reasonable future directions, not yet built:
   FHIR Plan-Net client exist; no specific payer endpoint is wired in by default — see
   `docs/insurance-network-research.md`)
 - Cost/price transparency intelligence (research only so far — see `docs/cost-intelligence-research.md`)
-- Expanded provider geography beyond the current Long Beach / LA demo area
+- Expanded provider geography beyond the current 30-ZIP LA County footprint — reference geography
+  for all 295 LA County ZIPs is already loaded (`docs/la-county-geography-sources.md`), so
+  importing more of them needs no code change, only a longer bounded ZIP list per import run
+  (`docs/la-county-provider-import.md`); California statewide is a further, deliberately deferred
+  step
 - Richer provider profiles (hours, languages, accepting-new-patients where reliably sourced)
 - Provider availability integration, only where a reliable data source exists
 - Password reset (deliberately not implemented yet — no "Forgot password" link is shown rather
@@ -274,9 +287,9 @@ Reasonable future directions, not yet built:
 - PostGIS (or Postgres's built-in `cube`/`earthdistance`), only if a future measurement against
   real production-scale data shows the current SQL bounding-box pre-filter isn't enough — see
   `docs/geospatial-scaling.md`
-- Address-level geocoding (the map's precise-vs-approximate marker styling already exists and
-  would activate automatically the moment `coordinatePrecision` data includes `EXACT`/
-  `ADDRESS_GEOCODE` rows — see `docs/map-and-location-accuracy.md`)
+- Running the address-level geocoding pipeline against most of the real dataset (the pipeline
+  itself is implemented and tested — `docs/geocoding-strategy.md` — but only runs when an operator
+  explicitly triggers a bounded batch; most locations are still `ZIP_CENTROID` today)
 - A dedicated shortlist-membership-check endpoint if per-user shortlist counts grow large enough
   to matter — see `docs/shortlists.md`
 - Natural-language administrative search parsing, and other safely-scoped AI ideas — research
