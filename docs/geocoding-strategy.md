@@ -1,88 +1,106 @@
 # Geocoding strategy
 
-Research and architecture only this phase (CLAUDE.md "Geocoding Implementation": "Only implement
-address geocoding if... official/free source is appropriate... Otherwise: architecture/
-documentation only"). No address-level geocoding is wired up yet -- every coordinate DocFit AI
-currently produces is a `ZIP_CENTROID`, truthfully labeled as such (`docs/map-and-location-accuracy.md`).
+**Implemented this phase** (LA County Expansion V5.1) -- an operator-controlled, bounded address
+geocoding pipeline now exists (`com.docfitai.backend.provider.geocoding`). This document previously
+described architecture/research only; it's now updated to describe the real implementation, what
+was verified empirically, and what remains deliberately deferred.
 
-## Current state
+## Empirical research (this phase)
 
-`NppesImportRunner` geocodes by looking up a provider location's postal code in `zip_geography`
-and using that ZIP's centroid latitude/longitude. This is honest (never `EXACT` or
-`ADDRESS_GEOCODE`) but genuinely imprecise -- every provider at the same ZIP shares one coordinate.
+WebFetch could not render the official Census Geocoder documentation pages (the same JS-rendering
+issue encountered with the NPPES docs in an earlier phase), so behavior was confirmed by direct
+requests against the live public API instead of trusted from documentation alone:
 
-## Can the Census geocoder help?
+- **`https://geocoding.geo.census.gov/geocoder/locations/address`** (structured street/city/state/
+  zip params) is free, requires **no API key**, and returned a correct real match for a known real
+  address (`4600 Silver Hill Rd, Washington, DC 20233` -> `38.845053, -76.928366`, matching the
+  Census Bureau's own headquarters).
+- A genuine no-match (a deliberately nonexistent address) returns **HTTP 200 with an empty
+  `addressMatches` array** -- not an error. A malformed/gibberish street value against a real city/
+  state/zip behaves the same way (empty array, not a 4xx).
+- A **missing required parameter** (e.g. no `street`) returns **HTTP 400**.
+- `benchmark=Public_AR_Current` is the Bureau's own current default (confirmed via
+  `/geocoder/benchmarks`), used here rather than a pinned historical vintage.
+- No documented numeric rate limit was found (same finding as NPPES) -- the client's own bounded
+  timeout/retry (10s timeout, 3 attempts, matching `NppesClient`'s posture) is a courtesy to the
+  source, not a response to a specific limit.
+- A **batch endpoint** (`/geocoder/locations/addressbatch`, CSV file upload, historically documented
+  as supporting up to 10,000 addresses per file) also exists and was not used this phase -- see
+  "Why the single-address endpoint, not batch," below.
 
-**Yes, and it's the right choice if/when this is implemented.** The U.S. Census Bureau's
-Geocoding Services API (`geocoding.geo.census.gov`):
+## What was implemented
 
-- Is **free**, publicly documented, and requires **no API key**.
-- Supports **batch geocoding**: up to 10,000 addresses per submitted file in one request --
-  exactly the shape needed to geocode a bounded provider import, not a live per-search-request
-  call.
-- Is authoritative for **U.S. addresses only** (a real, acceptable constraint -- DocFit AI only
-  serves U.S. addresses today).
-- Returns a **census-block-level match** with matched coordinates when it finds a confident match,
-  and explicitly reports non-matches rather than guessing -- exactly the "graceful failure" shape
-  this architecture needs (see "On failure," below).
+- **`CensusGeocoderClient`** -- thin HTTP client for the structured single-address endpoint,
+  bounded timeout/retry, never retries a 4xx.
+- **`CensusGeocoderResponseParser`** -- pure, unit-tested JSON parsing (`x`=longitude,
+  `y`=latitude, verified empirically) into a `GeocodeResult` (`Matched`/`NoMatch`/`Failed` --
+  deliberately distinct types, since a failure is retriable/transient and a genuine no-match is
+  not, and the two must never be treated the same way).
+- **`AddressGeocodeCache`** (`address_geocode_cache` table, V19 migration) -- keyed by the exact
+  same normalized-address function (`LocationNormalizer.normalizedKey`) `provider_location` already
+  uses for its own dedup, so an unchanged address is never re-geocoded on a later run. Only
+  `MATCHED`/`NO_MATCH` outcomes are cached -- a `FAILED` outcome (timeout, transient HTTP error) is
+  deliberately **not** cached, so it gets retried on the next run rather than being stuck failed
+  forever.
+- **`ProviderGeocodingService`** -- the pipeline: selects up to `maxRecords` (hard ceiling 2,000
+  per run) `provider_location` rows still at `ZIP_CENTROID` precision, checks the cache first, calls
+  the client on a cache miss, and on a real match calls the new
+  `ProviderLocation.upgradeToAddressGeocode(lat, lng)` method -- which deliberately touches **only**
+  latitude/longitude/precision, never phone/fax, unlike the existing `updateFrom(...)` re-import
+  method. A no-match or failure **never modifies existing coordinates** -- the ZIP centroid is
+  retained, exactly as CLAUDE.md's "do not invent coordinates" principle requires.
+- **`GeocodingRunner`** -- operator CLI entry point (`docfitai.geocode.enabled`, default `false`;
+  see `docs/operations-runbook.md`). **Never called from `GET /api/providers/search`** or any other
+  request path -- ingestion/maintenance only, matching the exact requirement from the original
+  architecture doc.
+- Guarded by `ProductionSafetyValidator` the same way CSV/geography import are -- refuses to start
+  the `prod` profile with `docfitai.geocode.enabled` left on.
 
-No documented hard rate limit was found for the batch endpoint beyond the 10,000-per-file batch
-cap; parallel requests are anecdotally reported to sustain a few thousand addresses per minute
-without hitting a cap, though DocFit AI would not rely on an undocumented number as a real budget
-(same posture as `docs/provider-source-research.md`'s NPPES section) -- a future implementation
-should self-impose pacing regardless.
+## Why the single-address endpoint, not batch
 
-## Could provider addresses be batch-geocoded?
+The batch endpoint requires a CSV-file multipart upload and returns a pipe-delimited response
+format, meaningfully more implementation complexity than the structured single-address GET request.
+Given this phase's per-run record cap (2,000, itself well under the batch endpoint's 10,000-per-file
+limit) and the existing cache avoiding repeat work across runs, the simpler single-address endpoint
+was judged sufficient for LA-County-scale usage. **The batch endpoint remains the right choice for a
+much larger future run** (e.g. a one-time statewide California geocode sweep) -- documented as a
+future option, not implemented, consistent with this codebase's "defer, don't rush" posture toward
+California work (`docs/geospatial-scaling.md`).
 
-Yes, structurally: after an NPPES/CSV import populates `provider_location` rows with
-`coordinate_precision = ZIP_CENTROID`, a **separate, operator-triggered maintenance step** could:
+## Precision labeling
 
-1. Select locations still at `ZIP_CENTROID` (or never-yet-geocoded).
-2. Batch them (≤10,000 per Census API call) into the Census batch geocoder.
-3. For each confident match, update `latitude`/`longitude` and set
-   `coordinate_precision = ADDRESS_GEOCODE`.
-4. For each non-match, leave the row at `ZIP_CENTROID` -- never invent a coordinate.
+Unchanged from the original architecture: a Census structured-address match is stored as
+`ADDRESS_GEOCODE`, never `EXACT` (reserved for a source that genuinely asserts surveyed/exact
+coordinates) -- the pipeline only ever takes the first returned match and does not attempt to
+disambiguate multiple candidate matches, so it never claims more confidence than the source
+actually provided.
 
-This is deliberately **not** part of the search request path (CLAUDE.md "Geocoding Cache":
-"Geocoding belongs in ingestion/maintenance pipeline, not provider-search request path") -- it
-would run as its own bounded, operator-triggered job, the same posture as the NPPES/CSV importers
-themselves.
+## Testing (CI never calls the live API)
 
-## What precision can be stored?
-
-DocFit AI's existing `CoordinatePrecision` enum already has the right shape for this:
-`ADDRESS_GEOCODE`, `ZIP_CENTROID`, `CITY_CENTROID`, `UNKNOWN` -- no schema change would be needed.
-A Census-geocoder match would be stored as `ADDRESS_GEOCODE`; `EXACT` is reserved for a source that
-genuinely asserts surveyed/exact coordinates, which Census's block-level match is not quite (it is
-a real address-level geocode, materially better than a ZIP centroid, but still a computed match
-against reference geography, not a GPS survey point) -- so `ADDRESS_GEOCODE` is the honest label,
-not `EXACT`.
-
-## What happens on failure?
-
-- **No match found**: the location keeps its existing `ZIP_CENTROID` coordinate and precision --
-  never a fabricated address-level coordinate (CLAUDE.md "Geocoding Failure": "fallback to ZIP
-  centroid where available... do not invent coordinates").
-- **API unreachable / batch request fails**: the maintenance job logs and stops (or retries with
-  the same bounded-retry posture as `NppesClient`); it never partially commits a batch's results in
-  a way that could mismatch addresses to coordinates.
-- **A location genuinely has no valid postal code** (shouldn't happen given upstream validation,
-  but defensively): `coordinate_precision = UNKNOWN`, never guessed.
+- `CensusGeocoderResponseParserTest` -- pure unit tests against real response bodies captured this
+  phase (a strong match, a genuine no-match, malformed/empty JSON) -- no HTTP involved.
+- `ProviderGeocodingServiceTest` -- exercises the full pipeline against a mocked
+  `CensusGeocoderClient` (same Mockito pattern as `ProviderRefreshServiceTest`'s mocked
+  `NppesClient`): a real match upgrades precision and coordinates, a no-match retains the ZIP
+  centroid, a failure retains coordinates and is not cached (so it's retried next run), and a
+  cached outcome is reused without a second client call.
 
 ## Caching
 
-If implemented, results would be cached by **normalized address**, not re-geocoded on every
-maintenance run -- most provider addresses don't change between imports, so re-sending an
-already-successfully-geocoded address to the Census API on every run would be wasted work and
-wasted goodwill toward a free public service. A `source_last_updated_at`-style check (already the
-pattern `provider_location` uses for other provenance) is enough; no new caching infrastructure
-(e.g. Redis) would be needed for this.
+Implemented as described in the original architecture doc: cached by normalized address
+(`address_geocode_cache`), not by a timestamp-based staleness check -- an address that hasn't
+changed is never re-geocoded, full stop, since NPPES doesn't report an "address changed" signal
+finer-grained than the whole location record changing (which would already produce a different
+normalized key).
 
-## Why not implemented this phase
+## What remains deferred
 
-This phase's priority was specialty and geography *architecture* readiness plus real, bounded data
-coverage verification (`docs/data-coverage.md`) -- adding a second external-API integration
-(beyond NPPES) for address-level geocoding was judged a distinct, separately-scoped follow-up
-rather than something to rush into the same phase. The architecture above is deliberately concrete
-enough that a future phase can implement it directly against this plan rather than re-researching
-it.
+- **Batch endpoint** for statewide-scale geocoding (see above).
+- **Multiple-candidate disambiguation** -- if the Census API ever returns more than one match, this
+  pipeline takes the first and does not attempt smarter disambiguation (e.g. picking the match
+  closest to the existing ZIP centroid). Not needed yet -- empirically, every real address tested
+  this phase returned zero or one match.
+- **Automatic re-geocoding on address change** -- currently, a changed `provider_location` row (new
+  normalized key) is simply treated as a new `ZIP_CENTROID` candidate on the next geocoding run,
+  the same as any other never-yet-geocoded row. No special "this address changed, re-geocode it
+  urgently" fast path exists.

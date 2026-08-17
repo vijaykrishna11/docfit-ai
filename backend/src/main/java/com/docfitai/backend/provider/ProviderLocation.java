@@ -115,6 +115,19 @@ public class ProviderLocation {
         this.coordinatePrecision = coordinatePrecision;
     }
 
+    /**
+     * Applied only by the operator-controlled geocoding pipeline ({@code ProviderGeocodingService})
+     * on a legitimate address-level match -- deliberately touches only coordinates/precision, never
+     * phone/fax (CLAUDE.md "Geocoding Pipeline": never blindly mark EXACT, only upgrade on a real
+     * match; a failed geocode must retain the existing ZIP-centroid coordinates rather than null
+     * them out, which is why this method is never called for a NoMatch/Failed outcome).
+     */
+    public void upgradeToAddressGeocode(BigDecimal latitude, BigDecimal longitude) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.coordinatePrecision = CoordinatePrecision.ADDRESS_GEOCODE;
+    }
+
     public Long getId() {
         return id;
     }

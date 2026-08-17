@@ -37,7 +37,8 @@ public class ProductionSafetyValidator {
             String corsAllowedOrigins,
             boolean syntheticInsuranceEnabled,
             boolean csvImportEnabled,
-            boolean geographyImportEnabled) {
+            boolean geographyImportEnabled,
+            boolean geocodeEnabled) {
         List<String> problems = new ArrayList<>();
 
         if (jwtSecret == null) {
@@ -76,6 +77,11 @@ public class ProductionSafetyValidator {
             problems.add(
                     "docfitai.import.geography.enabled (DOCFIT_GEOGRAPHY_IMPORT_ENABLED) is true -- geography "
                             + "reference import must be operator-triggered on demand, not left enabled on every startup.");
+        }
+        if (geocodeEnabled) {
+            problems.add(
+                    "docfitai.geocode.enabled (DOCFIT_GEOCODE_ENABLED) is true -- the geocoding batch must be "
+                            + "operator-triggered on demand, not left enabled on every startup.");
         }
 
         if (!problems.isEmpty()) {

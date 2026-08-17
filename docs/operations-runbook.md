@@ -132,6 +132,17 @@ flight when the next scheduled firing happens, that firing is skipped, not queue
 concurrently. A failed run marks its `data_import` row `FAILED` and releases the lock cleanly --
 it does not crash the app or block search.
 
+### Address geocoding batch (optional precision upgrade)
+
+```
+DOCFIT_GEOCODE_ENABLED=true DOCFIT_GEOCODE_MAX_RECORDS=500 java -jar backend/target/backend-0.0.1-SNAPSHOT.jar
+```
+Geocodes up to `DOCFIT_GEOCODE_MAX_RECORDS` (hard ceiling 2,000 per run) `ZIP_CENTROID`
+`provider_location` rows via the U.S. Census Geocoder, upgrading a real address-level match to
+`ADDRESS_GEOCODE` precision. Never called from the search request path. Cached by normalized
+address (`address_geocode_cache`) -- safe to re-run repeatedly; already-geocoded or already-tried
+addresses are skipped without a new API call. See `docs/geocoding-strategy.md`.
+
 ### Data quality report (standalone, no import triggered)
 
 ```

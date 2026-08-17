@@ -39,7 +39,8 @@ public class ProductionSafetyEnvironmentListener
                 resolve(environment, "docfitai.cors.allowed-origins"),
                 resolveBoolean(environment, "docfitai.insurance.synthetic-demo.enabled"),
                 resolveBoolean(environment, "docfitai.import.csv.enabled"),
-                resolveBoolean(environment, "docfitai.import.geography.enabled"));
+                resolveBoolean(environment, "docfitai.import.geography.enabled"),
+                resolveBoolean(environment, "docfitai.geocode.enabled"));
     }
 
     /**
