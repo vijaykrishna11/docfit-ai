@@ -27,7 +27,23 @@ import type {
   VerificationTypeValue,
 } from './types'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+/**
+ * Same-origin Render deployment (CLAUDE.md "Render Same-Origin Deployment"): Spring Boot serves
+ * both the API and the built SPA from one origin, so the production build must call the API at
+ * whatever origin is actually hosting the page -- never a hardcoded hostname. `VITE_API_BASE_URL`
+ * remains a supported explicit override (e.g. for a future split frontend/backend topology); when
+ * unset, dev defaults to the local backend dev server, and a production build defaults to
+ * `window.location.origin` (same-origin, relative-equivalent) rather than `localhost:8080`, which
+ * would be wrong for every real deployed environment.
+ */
+export function resolveApiBaseUrl(explicitBaseUrl: string | undefined, isProd: boolean, currentOrigin: string): string {
+  if (explicitBaseUrl) {
+    return explicitBaseUrl
+  }
+  return isProd ? currentOrigin : 'http://localhost:8080'
+}
+
+export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, import.meta.env.PROD, window.location.origin)
 
 const UNREACHABLE_MESSAGE = 'Unable to reach the search service. Please try again.'
 const INVALID_REQUEST_MESSAGE = "We couldn't process this search. Check your location and search options."

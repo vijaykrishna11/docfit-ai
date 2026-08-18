@@ -1,0 +1,35 @@
+# Root build context for the same-origin Dockerfile (CLAUDE.md "Render Same-Origin Deployment").
+# Keeps the build context small and never lets host-machine build artifacts or secrets leak in --
+# every stage rebuilds from source inside the image.
+
+# --- Frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
+# --- Backend ---
+backend/target/
+backend/HELP.md
+
+# --- Environment / secrets -- never sent to the Docker daemon ---
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# --- Git / CI / docs (not needed inside the image) ---
+.git/
+.github/
+docs/
+*.md
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
