@@ -11,6 +11,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
@@ -24,6 +25,24 @@ import org.springframework.web.cors.CorsConfigurationSource;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    // Render same-origin deployment (CLAUDE.md): Spring Boot also serves the built React SPA
+    // (index.html + hashed assets) from this same origin, so a plain GET for the app shell or a
+    // client-side route (e.g. "/providers/123", loaded directly via browser refresh) must be
+    // public -- the SPA itself is not sensitive, only the API data it calls is, and that's already
+    // gated per-endpoint below. Deliberately a predicate rather than an enumerated path list: it
+    // covers every current and future frontend route automatically without drifting out of sync
+    // with React Router's own route list, while still never permitting anything under /api or
+    // /actuator that isn't already explicitly listed above -- those always take priority since
+    // Spring Security evaluates authorizeHttpRequests rules in order, first match wins, and this
+    // rule is deliberately the last one before the anyRequest() fallback.
+    private static final RequestMatcher SPA_SHELL_REQUEST_MATCHER = request -> {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return !path.equals("/api") && !path.startsWith("/api/") && !path.equals("/actuator") && !path.startsWith("/actuator/");
+    };
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -72,6 +91,8 @@ public class SecurityConfig {
                         // include env/beans/configprops), this rule must NOT accidentally expose
                         // it -- see docs/threat-model.md ("Configuration leak").
                         .requestMatchers("/actuator/health", "/actuator/health/**")
+                        .permitAll()
+                        .requestMatchers(SPA_SHELL_REQUEST_MATCHER)
                         .permitAll()
                         .anyRequest()
                         .authenticated())

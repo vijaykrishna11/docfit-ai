@@ -1,5 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchSpecialties, searchProviders, setAccessToken, setRefreshHandler } from './client'
+import { fetchSpecialties, resolveApiBaseUrl, searchProviders, setAccessToken, setRefreshHandler } from './client'
+
+describe('resolveApiBaseUrl', () => {
+  it('defaults to the local backend dev server in development', () => {
+    expect(resolveApiBaseUrl(undefined, false, 'https://docfit-ai.onrender.com')).toBe('http://localhost:8080')
+  })
+
+  it('defaults to the current same-origin location in a production build', () => {
+    // Render same-origin deployment (CLAUDE.md): the production build must never hardcode a
+    // specific deployed hostname -- it calls the API at whatever origin is actually serving it.
+    expect(resolveApiBaseUrl(undefined, true, 'https://docfit-ai.onrender.com')).toBe('https://docfit-ai.onrender.com')
+  })
+
+  it('an explicit VITE_API_BASE_URL always wins, in dev or production', () => {
+    expect(resolveApiBaseUrl('https://api.docfit.example', false, 'http://localhost:5173')).toBe('https://api.docfit.example')
+    expect(resolveApiBaseUrl('https://api.docfit.example', true, 'https://docfit-ai.onrender.com')).toBe(
+      'https://api.docfit.example',
+    )
+  })
+})
 
 describe('searchProviders', () => {
   afterEach(() => {
