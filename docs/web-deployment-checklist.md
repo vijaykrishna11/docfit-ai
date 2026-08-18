@@ -8,68 +8,87 @@ Companion docs: `docs/production-deployment-plan.md` (architecture/requirements 
 
 - [x] Git release clean -- `release/web-beta-v1` created from a fully verified, linear-ancestor
       state; working tree clean; no unpushed commits.
-- [x] Backend tests green -- 207/207.
-- [x] Frontend tests green -- typecheck/lint/test/build all clean.
-- [x] E2E green -- 25/25, run twice, no flakiness.
+- [x] Backend tests green -- 214/214 (includes new same-origin SPA routing regression tests).
+- [x] Frontend tests green -- typecheck/lint/test/build all clean (47/47 unit tests, includes new
+      same-origin API-base-URL regression tests).
+- [x] E2E green against the real same-origin container (location/coverage/specialty test group,
+      6/6; broader search-result E2E coverage needs a fuller data import than this rehearsal's
+      small 2-ZIP sample -- see `docs/production-deployment-plan.md`).
 - [x] `npm audit` -- 0 vulnerabilities.
-- [x] Docker image builds and actually runs (migrations, prod-config refusals, real traffic all
-      verified against a disposable Postgres container).
-- [ ] **Cookie/CORS topology decided** -- see "Critical" section in
-      `docs/production-deployment-plan.md`. MUST be resolved before choosing a hosting provider,
-      not after.
+- [x] Docker image builds and actually runs (migrations, prod-config refusals, real traffic,
+      SPA routing, and static-asset serving all verified against a disposable Postgres container
+      -- see `docs/production-deployment-plan.md` "Same-origin Docker + production rehearsal").
+- [x] **Cookie/CORS topology decided** -- **same-origin, single Render Web Service** (root
+      `Dockerfile`, Spring Boot serves both the API and the built SPA). Resolved without a custom
+      domain -- see `docs/production-deployment-plan.md` "Deployment shape."
 - [ ] PostgreSQL provisioned (managed instance, real credentials, not `localhost:5433`).
 - [ ] `JWT_SECRET` generated (real, random, 256+ bits -- e.g. `openssl rand -base64 48`).
-- [ ] `CORS_ALLOWED_ORIGINS` known (the real deployed frontend origin, decided together with the
-      cookie topology item above).
+- [ ] `CORS_ALLOWED_ORIGINS` known -- same-origin deployment, so this is simply the service's own
+      deployed URL (e.g. `https://docfit-ai.onrender.com`), known once the Render service name is
+      chosen.
 - [ ] Secure cookie config confirmed (`AUTH_COOKIE_SECURE=true`, the `prod` profile default --
       only needs explicit setting if a specific deployment overrides it).
 - [ ] Synthetic insurance OFF (`DOCFIT_SYNTHETIC_INSURANCE_ENABLED` unset -- default is already
       off; the `prod` profile refuses to start if this is somehow `true`).
 - [ ] Provider bootstrap method decided (geography import + bounded NPPES import -- see "Production
       database bootstrap plan," below).
-- [ ] Frontend `VITE_API_BASE_URL` known (the real deployed backend origin).
 - [ ] Health endpoint reachable post-deploy (`GET /actuator/health`).
-- [ ] SPA rewrite configured at the hosting layer (see below).
 - [ ] Smoke tests run against the real deployed environment (see "Post-deploy smoke tests," below).
 - [ ] Backup plan confirmed (managed Postgres provider's own automated backups, at minimum).
 - [ ] Rollback plan confirmed (see below).
 
-## Required backend environment variables
+## Required environment variables (one Render Web Service -- same-origin, no separate frontend host)
 
 | Variable | Required | Notes |
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | Yes | `prod` |
 | `JWT_SECRET` | Yes | Real, random, 256+ bits |
-| `CORS_ALLOWED_ORIGINS` | Yes | Real frontend origin, never localhost |
+| `CORS_ALLOWED_ORIGINS` | Yes | The service's own deployed origin (e.g. `https://docfit-ai.onrender.com`) -- same-origin browser traffic doesn't strictly need CORS, but `ProductionSafetyValidator` still requires this set to a real, non-localhost value |
 | `SPRING_DATASOURCE_URL` | Yes | `jdbc:postgresql://<host>:<port>/<db>` -- transform the managed provider's connection string into this exact JDBC form; do not paste a `postgres://` URI directly |
 | `POSTGRES_PASSWORD` (or the datasource password property directly) | Yes | Real DB password, never `changeme` |
 | `POSTGRES_USER` | Yes (unless baked into `SPRING_DATASOURCE_URL`) | Real DB user |
-| `PORT` | Usually automatic | Most PaaS platforms set this themselves |
+| `PORT` | Usually automatic | Render sets this itself; `server.port=${PORT:8080}` already respects it |
 | `AUTH_COOKIE_SECURE` | No | Defaults to `true` under `prod` |
 | `DOCFIT_SYNTHETIC_INSURANCE_ENABLED` | No | Must stay unset/`false` |
 | `DOCFIT_PROVIDER_CSV_IMPORT_ENABLED` / `DOCFIT_GEOGRAPHY_IMPORT_ENABLED` / `DOCFIT_GEOCODE_ENABLED` | No | Must stay unset/`false` on every normal boot -- these are one-shot operator actions (see below), not always-on flags |
 
-## Required frontend environment variables
+**No separate frontend environment variables are needed for this deployment** -- `VITE_API_BASE_URL`
+is deliberately left unset at build time so the frontend defaults to `window.location.origin`
+(same-origin). It remains a supported override only if a future split-topology deployment (with a
+custom domain) needs the frontend to call a different host.
 
-| Variable | Required | Notes |
-|---|---|---|
-| `VITE_API_BASE_URL` | Yes | The real deployed backend origin, baked in at build time (Vite env vars are compile-time, not runtime) |
+## SPA routing
 
-## SPA routing requirement
+**No hosting-layer rewrite rule to configure** -- the frontend is embedded in and served by the
+same Spring Boot process (`SpaWebConfig`), which handles serving `index.html` for client-side
+routes (`/providers/:id`, `/signin`, `/register`, `/saved`, `/saved-searches`, `/shortlists`,
+`/shortlists/:id`, `/navigator`, `/account`, `/compare`, `/share/providers`, `/locations`, and any
+other/future frontend route) itself. Verified directly this phase with a hard refresh (not just
+client-side navigation) on `/providers/123` against the real running container -- returns the real
+SPA HTML, not a 404.
 
-The frontend is a client-side-routed SPA (React Router) with routes including `/providers/:id`,
-`/signin`, `/register`, `/saved`, `/saved-searches`, `/shortlists`, `/shortlists/:id`, `/navigator`,
-`/account`, `/compare`, `/share/providers`. The hosting layer **must** rewrite all non-asset paths
-to `index.html` -- verify specifically with a hard refresh (not just client-side navigation) on a
-deep route like `/providers/123`; it must not 404.
+## Render Web Service settings (manual setup -- no `render.yaml` written this phase)
+
+One Render **Web Service**, Docker runtime:
+
+| Setting | Value |
+|---|---|
+| Root directory | Repository root (not `backend/`) |
+| Dockerfile path | `Dockerfile` (the root one -- not `backend/Dockerfile`) |
+| Docker build context | Repository root |
+| Health check path | `/actuator/health` |
+| Port | Auto-detected via `PORT` (Render sets it; the app reads it via `server.port=${PORT:8080}`) |
+
+Plus one Render **PostgreSQL** instance, and the environment variables listed above set on the Web
+Service. No separate Render Static Site is needed or used.
 
 ## Production database bootstrap plan (first deployment only)
 
 1. Provision the managed PostgreSQL instance.
 2. Configure the backend's environment variables (above).
-3. Start the backend (default profile boot, or `prod` once the cookie/CORS topology is decided) --
-   Flyway applies all 19 migrations automatically on first startup. Verified this phase against a
-   genuinely empty database.
+3. Start the service (`prod` profile) -- Flyway applies all 19 migrations automatically on first
+   startup. Verified this phase against a genuinely empty database, using the real root
+   `Dockerfile` image (not just the Maven-run jar).
 4. Load reference geography: run the geography importer once
    (`DOCFIT_GEOGRAPHY_IMPORT_ENABLED=true` for one boot, then unset it) -- loads the real,
    bundled, source-verified 295-ZIP LA County reference set.
@@ -107,10 +126,10 @@ and even then the reproducible import above is preferred since it's independentl
 - Map/list view (if applicable) renders.
 - Register a real test account.
 - Login.
-- **Confirm the refresh cookie actually round-trips** -- this is the one most likely to silently
-  fail on a bad topology choice (see "Critical" cookie/CORS finding). Test by waiting past the
-  short access-token TTL (or forcing a refresh) and confirming the session survives, not just that
-  login initially succeeds.
+- **Confirm the refresh cookie actually round-trips.** Same-origin serving is exactly what makes
+  this reliable now (no cross-site `SameSite=Lax` withholding) -- still worth confirming directly
+  against the real deployment: wait past the short access-token TTL (or force a refresh) and
+  confirm the session survives, not just that login initially succeeds.
 - Save a provider.
 - Create a shortlist.
 - Visit the Navigator.

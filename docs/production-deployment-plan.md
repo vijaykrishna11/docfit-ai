@@ -6,19 +6,24 @@ repository today -- not an aspirational target architecture. Companion to
 
 ## Deployment shape
 
-- **Backend**: a single Spring Boot jar, containerized via `backend/Dockerfile` (multi-stage,
-  Java 21 JRE runtime, non-root user, no baked secrets -- all configuration via environment
-  variables). Deploy anywhere that runs a container: a single VM with Docker, a managed container
-  service, etc. No orchestration platform is assumed or required at this scale.
-- **Frontend**: a static build (`npm run build` -> `frontend/dist/`) -- plain HTML/CSS/JS, no
-  server-side rendering, no Node process needed at runtime. Deploy to any static host/CDN. **No
-  frontend Dockerfile exists in this repository** -- if the chosen host requires a container (rather
-  than direct static-file hosting), one would need to be added (a minimal `nginx`/`caddy` image
-  serving `dist/`); not built this phase since it depends on the actual hosting choice.
+**Chosen topology for the first ($0) Render beta: SAME-ORIGIN, one service.** A single Render Web
+Service runs one Java 21 process (via the root `Dockerfile`) that serves both the REST API
+(`/api/**`) and the built React SPA (everything else) from one public origin. This is deliberately
+**not** a separate static-site-plus-API-service split -- see "Cookie/CORS deployment topology --
+RESOLVED via same-origin serving," below, for why that split is unsafe without a paid custom
+domain, and why same-origin serving is the fix that avoids needing one.
+
+- **One image, one process**: the root `Dockerfile` (multi-stage: Node 22 builds the frontend,
+  Java 21 JDK builds the backend and embeds the frontend's `dist/` output into the jar's
+  `static/` classpath resources, a final Java 21 JRE-only runtime stage runs it) — no Node, no
+  Maven/JDK build tooling, and no secrets in the final image (verified this phase: `which node npm
+  mvn` all report nothing inside the running container). Non-root runtime user, unchanged from the
+  prior backend-only Dockerfile. Build from the **repository root**, not `backend/`.
+- `backend/Dockerfile` (backend-only, no embedded frontend) is unchanged and still present --
+  useful for local backend-only image builds or a future split-service topology once a custom
+  domain makes that safe, but it is **not** what gets deployed for this beta.
 - **Database**: external managed Postgres (or a self-run instance) -- not part of the application
-  containers. `docker-compose.yml` in this repo starts Postgres only, for local development; there
-  is no production-shaped compose file bundling backend+frontend+postgres together (see "Gaps"
-  below).
+  container. `docker-compose.yml` in this repo starts Postgres only, for local development.
 
 ## Required environment variables (backend, `prod` profile)
 
@@ -50,10 +55,15 @@ Optional but recommended:
 | `AUTH_RATE_LIMIT_MAX_ATTEMPTS` / `AUTH_RATE_LIMIT_WINDOW_MINUTES` | Login/register throttling tuning (defaults: 10 attempts / 5 min) |
 | `FHIR_PLAN_NET_BASE_URL` | Only if a specific, vetted payer FHIR Plan-Net endpoint is being wired in -- unset by default, meaning no live payer source at all |
 
-## Critical: cookie/CORS deployment topology (found during this phase's release prep)
+## Cookie/CORS deployment topology -- RESOLVED via same-origin serving
+
+**Resolved this phase.** The finding below (found during the prior release-prep phase) is why the
+deployment shape at the top of this document is same-origin, single-service, rather than a
+separate static-site-plus-API-service split. Kept in full for the record.
 
 The refresh-token cookie is `HttpOnly; Secure; SameSite=Lax` (`AuthController`, deliberate CSRF
-defense -- see `SecurityConfig`'s own doc comment). **`SameSite=Lax` cookies are only sent on
+defense -- see `SecurityConfig`'s own doc comment; **unchanged this phase** -- `SameSite` was never
+relaxed to `None`, and no CSRF assumption was weakened). **`SameSite=Lax` cookies are only sent on
 same-site requests.** "Same-site" is defined by the browser's registrable-domain (eTLD+1)
 computation, using the Public Suffix List -- not by "looks like the same company."
 
@@ -69,31 +79,47 @@ from `docfit-web.onrender.com` to `/api/auth/refresh` -- login would appear to w
 token's short TTL (15 min default), and refresh-cookie-dependent flows would break in a way that is
 easy to miss in a quick manual smoke test but breaks real usage.
 
-**This must be resolved before choosing a final topology** -- options, not decided here:
+Three options were identified; **option 2 was implemented this phase**:
 
-1. **Custom domain with both services under one registrable domain** (e.g. `app.docfit.example`
-   for the frontend, `api.docfit.example` for the backend) -- subdomains of the same registrable
-   domain ARE same-site for `SameSite=Lax` purposes. This is the standard fix and requires owning a
-   real domain plus configuring it at the hosting platform.
-2. **Serve frontend and backend from the same origin** (e.g. the backend serves the built static
-   frontend, or a reverse proxy puts both behind one hostname) -- avoids the cross-site problem
-   entirely, at the cost of losing the simplicity of a pure static-host + separate API-host split.
-3. **Relax `SameSite` to `None`** (requires `Secure=true`, already the prod default) -- makes the
-   cookie work cross-site, but reopens exactly the CSRF vector `SecurityConfig`'s own doc comment
-   says `Lax` was chosen to close. Would need a real CSRF-protection decision alongside it. **Not
-   done this phase** -- a security-relevant code change, out of this release-prep phase's scope
-   ("do not make product feature changes").
+1. ~~Custom domain with both services under one registrable domain~~ -- not chosen: requires
+   buying/configuring a domain, and the beta is explicitly a $0 deployment.
+2. **Serve frontend and backend from the same origin** (chosen) -- the root `Dockerfile` builds
+   both and Spring Boot serves the built SPA (`SpaWebConfig`) alongside the API from one process,
+   one origin. No cross-site request is ever made, so `SameSite=Lax` keeps working exactly as
+   designed, with zero cost and zero domain purchase. See "Same-origin request flow," below.
+3. ~~Relax `SameSite` to `None`~~ -- explicitly not done, per this phase's own directive: `SameSite`
+   stays `Lax`, no CSRF assumption was weakened.
 
-No topology was selected or deployed this phase. See `docs/web-deployment-checklist.md` and the
-final release report for the recommendation.
+## Same-origin request flow (implemented this phase)
 
-## SPA routing (static frontend hosting)
+- **Frontend build**: `frontend/src/api/client.ts`'s `resolveApiBaseUrl()` defaults to
+  `window.location.origin` in a production build (`import.meta.env.PROD`) and to
+  `http://localhost:8080` in development -- never a hardcoded hostname. `VITE_API_BASE_URL` remains
+  a supported explicit override for a future split topology.
+- **Backend routing**: `SpaWebConfig` registers a resource handler on `/**` (classpath
+  `static/`) with a custom `PathResourceResolver` that serves a real static file when one exists,
+  falls back to `index.html` for genuine SPA routes (so React Router resolves deep links like
+  `/providers/123` on a hard refresh, and its own client-side "not found" page for anything truly
+  unknown), and returns a real 404 -- never the SPA shell -- for `/api/**`, `/actuator/**`, or a
+  path that looks like a missing static asset (has a file extension). `SecurityConfig` gained one
+  additional `permitAll()` rule (`SPA_SHELL_REQUEST_MATCHER`) so these same GET requests aren't
+  blocked by `anyRequest().authenticated()` before ever reaching that resource handler -- scoped
+  precisely to "GET, not `/api/**`, not `/actuator/**`," so no protected API endpoint's
+  authorization changed.
+- **CORS**: same-origin browser traffic doesn't strictly need it, but `ProductionSafetyValidator`
+  still requires `CORS_ALLOWED_ORIGINS` to be set to a real, non-localhost value (unchanged --
+  no reason to weaken this guard for a same-origin deployment; set it to the same
+  `https://<service>.onrender.com` origin the service is deployed at).
 
-The frontend is a client-side-routed SPA (React Router). The hosting layer must rewrite all
-non-asset paths to `index.html` (a request to `/providers/123` or `/signin` must serve the SPA shell,
-not a 404) -- this is a hosting-layer configuration step (e.g. a catch-all rewrite rule), not
-something the build output does itself. Verify this specifically: a hard refresh (not just
-client-side navigation) on a deep route like `/providers/123` must not 404.
+## SPA routing
+
+**No hosting-layer rewrite rule needed** -- this was the requirement for a *separate static-site*
+topology (superseded, see above). With same-origin serving, `SpaWebConfig` (inside the same Spring
+Boot process) handles the SPA-fallback itself; there is no separate static host to configure a
+rewrite rule on. Verified directly this phase (not just reasoned about) against the real running
+container: `GET /`, `/signin`, `/providers/123` all return the SPA shell (200); a genuinely unknown
+route also returns the SPA shell (200, so React Router's own not-found page can render); a missing
+hashed asset and an unmatched `/api/**` path both return real 404s, never the SPA shell.
 
 ## Pre-deploy checklist
 
@@ -101,9 +127,9 @@ client-side navigation) on a deep route like `/providers/123` must not 404.
 2. Confirm every required env var above is set to a real, non-default, non-placeholder value.
 3. Run a local production rehearsal first (see below) against a disposable Postgres before touching
    the real one.
-4. Confirm the SPA rewrite rule is configured at the hosting layer (see above).
-5. Confirm `CORS_ALLOWED_ORIGINS` exactly matches the real frontend's deployed origin (scheme +
-   host, no trailing slash mismatch).
+4. Confirm `CORS_ALLOWED_ORIGINS` is set to the deployed service's own origin, exactly (scheme +
+   host, no trailing slash mismatch) -- same-origin deployment, so this is the one origin the
+   service itself is deployed at; there's no separate frontend host to configure a rewrite rule on.
 
 ## Local production rehearsal (data-expansion phase)
 
@@ -145,18 +171,57 @@ Dockerfile and assumed it works:
   `geographyZipCount: 6` from the V3 migration seed, correctly present); `POST /api/auth/register`
   -> `201` with a real issued access token; `POST /api/auth/login` -> `200` with a `Set-Cookie`
   header confirmed to carry exactly `Secure; HttpOnly; SameSite=Lax` in the real `prod`-profile
-  response (see "Critical: cookie/CORS deployment topology," above, for why this matters for
-  hosting-topology selection).
+  response (see "Cookie/CORS deployment topology," above, for why this matters for hosting-topology
+  selection -- at the time of this specific rehearsal, still unresolved; resolved in the phase
+  documented immediately below).
 - **Frontend production build**: `npm run build` with a non-localhost `VITE_API_BASE_URL` baked in
   cleanly; confirmed the production URL is present in the built bundle and zero occurrences of
   `localhost:8080` remain.
 - Rehearsal containers/network fully torn down afterward -- nothing left running, no state
   persisted anywhere outside this rehearsal.
 
+## Same-origin Docker + production rehearsal (Render same-origin deployment phase)
+
+Built and ran the new **root** `Dockerfile` (not `backend/Dockerfile`) -- built from the repository
+root, embedding the frontend into the backend jar -- against a fresh disposable Postgres:
+
+- **Build**: succeeded. Final image contains no `node`, `npm`, or `mvn` (`which` returns nothing
+  for all three inside the running container -- confirmed directly, not assumed); content size
+  237MB (JRE + fat jar only).
+- **Empty-DB migration path**: same clean result as the prior rehearsal (V1 through V19 applied,
+  app started in ~15s).
+- **`prod`-profile config refusals**: re-confirmed working (missing/weak JWT secret, placeholder
+  DB password) -- unaffected by the same-origin change, as expected.
+- **A fully valid `prod` config, full checklist, all verified against the real running container**:
+  `GET /actuator/health` -> 200; `GET /` -> real React HTML (`<!doctype html>...<title>DocFit
+  AI</title>...`); `GET /signin` and `GET /providers/123` (direct navigation, not client-side
+  routing) -> 200, the same real SPA HTML; `GET /api/specialties` -> real JSON; `GET
+  /api/discovery/this-does-not-exist` -> a real `404` JSON error (`"No static resource
+  api/discovery/this-does-not-exist"`), never the SPA shell; a real static asset (`/assets/*.js`)
+  -> 200 with the correct content-type; a deliberately-missing hashed asset -> a real 404 (`404`,
+  `application/json`), never silently swapped for HTML; `POST /api/auth/register` -> `201` with a
+  real access token; `POST /api/auth/login` -> `200` with `Set-Cookie:` carrying exactly `Secure;
+  HttpOnly; SameSite=Lax` -- **unchanged from the prior (would-be cross-site) topology**, now
+  actually usable because the request that sends it back on refresh is same-origin.
+- **Frontend bundle inspected directly**: exactly one occurrence of the string `localhost:8080` in
+  the built, minified bundle -- traced to the unreachable dead-code fallback branch inside
+  `resolveApiBaseUrl`'s minified body (`e||(t?n:"http://localhost:8080")`); the actual computed
+  constant used at runtime evaluates to `window.location.origin`, confirmed both by direct
+  expression evaluation and by the real `/api/specialties` call above succeeding against the same
+  origin serving the page. Documented honestly rather than claimed as a clean zero -- it's a benign
+  minifier artifact, not a functional reference.
+- **E2E (Playwright, real browser) against the real running container**: the location-suggestions/
+  coverage-panel/specialty-selector/unsupported-area test group (6 scenarios) passed cleanly against
+  a small bounded real NPPES import (568 providers, 2 ZIPs) loaded into the rehearsal database.
+  A separate group of search-result-card tests failed against this same rehearsal -- traced
+  directly (via a DB query and a direct API call) to the 2-ZIP sample genuinely containing zero
+  Cardiology-taxonomy providers near the tested ZIP, not a routing/topology defect; a Primary-Care
+  search against the same data returned real results correctly through the same-origin path.
+- Rehearsal containers/network fully torn down afterward.
+
 **Still not rehearsed**: a full `prod`-profile boot behind a real TLS-terminating reverse proxy or
 load balancer (an actual infrastructure/hosting choice outside this repository's scope to simulate
-locally), and the cross-site cookie topology question itself (needs a real chosen domain
-architecture to test against, not just reasoned about).
+locally).
 
 ## Data bootstrap for a new environment
 
@@ -182,12 +247,15 @@ architecture to test against, not just reasoned about).
 
 ## Gaps (honestly listed, not fixed this phase)
 
-- **Cookie/CORS topology decision not made** -- see "Critical" section above. This is the single
-  highest-priority open item before choosing a hosting provider/domain setup.
+- ~~Cookie/CORS topology decision not made~~ -- **resolved this phase**: same-origin serving (see
+  "Deployment shape" and "Same-origin request flow," above).
 - No production-shaped `docker-compose.yml` bundling backend+frontend+postgres together --
-  the existing compose file is dev-Postgres-only.
-- No frontend Dockerfile (only needed if the chosen host requires a container rather than static
-  hosting; Render Static Site and most static hosts don't need one).
+  the existing compose file is dev-Postgres-only. Less pressing now that frontend+backend are one
+  container, but a local compose file exercising the real root `Dockerfile` against disposable
+  Postgres would still be a reasonable future convenience.
+- A separate frontend Dockerfile is no longer relevant to the chosen topology (the frontend is
+  embedded into the backend image, not deployed as its own static host) -- would only matter again
+  if a future split-service topology (custom domain) is chosen instead.
 - No CI/CD deployment automation reviewed/built beyond the existing `.github/workflows/ci.yml` test
   pipeline (which does not deploy anything) -- deliberately out of scope for this release-prep
   phase.
